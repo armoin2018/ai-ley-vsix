@@ -91,11 +91,11 @@ export class UpdateScheduler {
         if (updated) {
           await this.syncConfigurations();
           this.lastUpdateTime = new Date();
-          this.updateStatusBar('Ready');
-        } else {
-          this.updateStatusBar('Ready');
         }
+
+        this.updateStatusBar('Ready');
       } else {
+        await this.syncConfigurations({ silent: true });
         this.updateStatusBar('Ready');
       }
     } catch (error) {
@@ -109,9 +109,9 @@ export class UpdateScheduler {
   /**
    * Synchronizes configurations after update
    */
-  private async syncConfigurations(): Promise<void> {
+  private async syncConfigurations(options: { silent?: boolean } = {}): Promise<void> {
     const agenticConfig = ConfigurationManager.getAgenticConfig();
-    await this.configManager.syncConfigurations(agenticConfig);
+    await this.configManager.syncConfigurations(agenticConfig, options);
   }
 
   /**

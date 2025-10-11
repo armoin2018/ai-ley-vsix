@@ -236,6 +236,38 @@ export class ConfigurationManager {
   }
 
   /**
+   * Remove a file if it exists
+   */
+  private removeFile(filePath: string): boolean {
+    if (fs.existsSync(filePath)) {
+      try {
+        fs.unlinkSync(filePath);
+        return true;
+      } catch (error) {
+        console.error(`Failed to remove file ${filePath}:`, error);
+        return false;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Remove a directory recursively if it exists
+   */
+  private removeDirectory(dirPath: string): boolean {
+    if (fs.existsSync(dirPath)) {
+      try {
+        fs.rmSync(dirPath, { recursive: true, force: true });
+        return true;
+      } catch (error) {
+        console.error(`Failed to remove directory ${dirPath}:`, error);
+        return false;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Copy a directory recursively from source to target
    */
   private async copyDirectory(
@@ -290,35 +322,62 @@ export class ConfigurationManager {
   /**
    * Synchronize configurations based on user settings
    */
-  public async syncConfigurations(agenticConfig: AgenticConfig): Promise<void> {
+  public async syncConfigurations(
+    agenticConfig: AgenticConfig,
+    options: { silent?: boolean } = {},
+  ): Promise<void> {
+    const silent = options.silent ?? false;
     const mappings = this.getFileMappings();
     let totalUpdated = 0;
+    let totalRemoved = 0;
 
     for (const mapping of mappings) {
-      // Check condition if exists
-      if (mapping.condition && !mapping.condition(agenticConfig)) {
-        continue;
-      }
-
-      const sourcePath = path.join(this.cacheRoot, mapping.source);
       const targetPath = path.join(this.workspaceRoot, mapping.target);
+      
+      // Check if this mapping should be active based on condition
+      const shouldExist = !mapping.condition || mapping.condition(agenticConfig);
+      
+      if (shouldExist) {
+        // Copy files when enabled
+        const sourcePath = path.join(this.cacheRoot, mapping.source);
 
-      if (!fs.existsSync(sourcePath)) {
-        console.log(`Source not found: ${mapping.source}`);
-        continue;
-      }
-
-      try {
-        if (mapping.type === 'file') {
-          await this.copyFile(sourcePath, targetPath);
-          totalUpdated++;
-        } else if (mapping.type === 'directory') {
-          const count = await this.copyDirectory(sourcePath, targetPath);
-          totalUpdated += count;
+        if (!fs.existsSync(sourcePath)) {
+          console.log(`Source not found: ${mapping.source}`);
+          continue;
         }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        vscode.window.showWarningMessage(`Failed to copy ${mapping.source}: ${errorMessage}`);
+
+        try {
+          if (mapping.type === 'file') {
+            await this.copyFile(sourcePath, targetPath);
+            totalUpdated++;
+          } else if (mapping.type === 'directory') {
+            const count = await this.copyDirectory(sourcePath, targetPath);
+            totalUpdated += count;
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          vscode.window.showWarningMessage(`Failed to copy ${mapping.source}: ${errorMessage}`);
+        }
+      } else {
+        // Remove files when disabled (except .ai-ley which is always kept)
+        if (mapping.source === '.ai-ley') {
+          continue; // Never remove core .ai-ley directory
+        }
+        
+        try {
+          if (mapping.type === 'file') {
+            if (this.removeFile(targetPath)) {
+              totalRemoved++;
+            }
+          } else if (mapping.type === 'directory') {
+            if (this.removeDirectory(targetPath)) {
+              totalRemoved++;
+            }
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          vscode.window.showWarningMessage(`Failed to remove ${mapping.target}: ${errorMessage}`);
+        }
       }
     }
 
@@ -334,11 +393,18 @@ export class ConfigurationManager {
       }
     }
 
+    // Provide feedback to user
+    const messages: string[] = [];
     if (totalUpdated > 0) {
-      vscode.window.showInformationMessage(
-        `AI-Ley: Synchronized ${totalUpdated} files successfully!`,
-      );
-    } else {
+      messages.push(`${totalUpdated} files added/updated`);
+    }
+    if (totalRemoved > 0) {
+      messages.push(`${totalRemoved} files/directories removed`);
+    }
+
+    if (messages.length > 0) {
+      vscode.window.showInformationMessage(`AI-Ley: ${messages.join(', ')}`);
+    } else if (!silent) {
       vscode.window.showInformationMessage(`AI-Ley: All configurations are up to date.`);
     }
   }
@@ -349,27 +415,33 @@ export class ConfigurationManager {
   public async updateGitignore(): Promise<void> {
     const gitignorePath = path.join(this.workspaceRoot, '.gitignore');
     
+    console.log('AI-Ley: Checking .gitignore at:', gitignorePath);
+    
     // Files and directories to ignore
     const ignoreEntries = [
-      '# AI-Ley generated files',
+      '',
+      '# AI-Ley generated files and directories',
+      '# Core AI-Ley',
       '.ai-ley/',
       '.cache/',
+      '',
+      '# AI Assistant configurations',
+      '.github/copilot-instructions.md',
+      'CLAUDE.md',
       '.claude/',
+      'GEMINI.md',
       '.gemini/',
       '.cursor/',
+      'cursor-config.json',
       '.windsurf/',
+      'windsurf-config.json',
       '.clinerules/',
       '.roorules/',
       '.codex/',
       '.opencode/',
       '.metis/',
-      'CLAUDE.md',
-      'GEMINI.md',
       'AGENT.md',
-      'AGENTS.md',
-      'cursor-config.json',
-      'windsurf-config.json',
-      ''
+      'AGENTS.md'
     ];
 
     let gitignoreContent = '';
@@ -379,11 +451,16 @@ export class ConfigurationManager {
     if (fs.existsSync(gitignorePath)) {
       existingContent = fs.readFileSync(gitignorePath, 'utf8');
       gitignoreContent = existingContent;
+      console.log('AI-Ley: Found existing .gitignore');
+    } else {
+      console.log('AI-Ley: No existing .gitignore, will create new one');
     }
 
     // Check if AI-Ley section already exists
-    const aileyMarker = '# AI-Ley generated files';
+    const aileyMarker = '# AI-Ley generated files and directories';
     if (!gitignoreContent.includes(aileyMarker)) {
+      console.log('AI-Ley: Adding AI-Ley entries to .gitignore');
+      
       // Add AI-Ley section
       if (gitignoreContent && !gitignoreContent.endsWith('\n')) {
         gitignoreContent += '\n';
@@ -392,7 +469,10 @@ export class ConfigurationManager {
       
       // Write updated .gitignore
       fs.writeFileSync(gitignorePath, gitignoreContent);
+      console.log('AI-Ley: .gitignore updated successfully');
       vscode.window.showInformationMessage('AI-Ley: Updated .gitignore with AI-Ley files');
+    } else {
+      console.log('AI-Ley: .gitignore already contains AI-Ley entries, skipping update');
     }
   }
 

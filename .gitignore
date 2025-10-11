@@ -12,3 +12,27 @@ BUILD.md
 COMPLETE.md
 IMPLEMENTATION.md
 PACKAGING_SUCCESS.md
+
+
+# AI-Ley generated files and directories
+# Core AI-Ley
+.ai-ley/
+.cache/
+
+# AI Assistant configurations
+.github/copilot-instructions.md
+CLAUDE.md
+.claude/
+GEMINI.md
+.gemini/
+.cursor/
+cursor-config.json
+.windsurf/
+windsurf-config.json
+.clinerules/
+.roorules/
+.codex/
+.opencode/
+.metis/
+AGENT.md
+AGENTS.md

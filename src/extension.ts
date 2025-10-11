@@ -66,6 +66,61 @@ function appendProjectNameToUrl(url: string): string {
   }
 }
 
+/**
+ * Check if AI-Ley is already initialized in the workspace
+ */
+function isAiLeyInitialized(workspaceRoot: string): boolean {
+  const fs = require('fs');
+  const aiLeyPath = path.join(workspaceRoot, '.ai-ley');
+  const cachePath = path.join(workspaceRoot, '.cache', 'ai-ley');
+  
+  // Check if either .ai-ley directory or cache exists
+  return fs.existsSync(aiLeyPath) || fs.existsSync(cachePath);
+}
+
+/**
+ * Check if project matches auto-init pattern
+ */
+function projectMatchesPattern(projectName: string, pattern: string): boolean {
+  try {
+    const regex = new RegExp(pattern);
+    return regex.test(projectName);
+  } catch (error) {
+    console.error('Invalid regex pattern:', pattern, error);
+    return false;
+  }
+}
+
+/**
+ * Check if AI-Ley should auto-initialize for this workspace
+ */
+async function shouldAutoInitialize(workspaceRoot: string, projectName: string): Promise<boolean> {
+  const config = vscode.workspace.getConfiguration('aiLey');
+  
+  const isInitialized = isAiLeyInitialized(workspaceRoot);
+  
+  if (!isInitialized) {
+    // New project - check if auto-init is enabled for new projects
+    const autoInitNew = config.get<boolean>('autoInit.newProjects', false);
+    if (autoInitNew) {
+      console.log('Auto-initializing AI-Ley for new project:', projectName);
+      return true;
+    }
+  } else {
+    // Existing project with AI-Ley - check if auto-init is enabled for existing projects
+    const autoInitExisting = config.get<boolean>('autoInit.existingProjects', false);
+    if (autoInitExisting) {
+      const pattern = config.get<string>('autoInit.projectPattern', '.*');
+      if (projectMatchesPattern(projectName, pattern)) {
+        console.log('Auto-initializing AI-Ley for existing project matching pattern:', projectName);
+        return true;
+      }
+    }
+  }
+  
+  return false;
+}
+
 export async function activate(context: vscode.ExtensionContext) {
   // Create and show a status bar item for dashboard
   const dashboardStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
@@ -85,6 +140,20 @@ export async function activate(context: vscode.ExtensionContext) {
   // Initialize managers if workspace is available
   if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
     const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
+    const projectName = getProjectName();
+    
+    // Check if AI-Ley should auto-initialize
+    const shouldInit = await shouldAutoInitialize(workspaceRoot, projectName);
+    
+    if (shouldInit) {
+      // Show notification about auto-initialization
+      const isNew = !isAiLeyInitialized(workspaceRoot);
+      const message = isNew 
+        ? `AI-Ley: Auto-initializing for new project "${projectName}"`
+        : `AI-Ley: Auto-initializing for project "${projectName}"`;
+      vscode.window.showInformationMessage(message);
+    }
+    
     await initializeManagers(context, workspaceRoot, syncStatus);
   }
 
@@ -97,12 +166,13 @@ export async function activate(context: vscode.ExtensionContext) {
     const mcpEnabled = config.get<boolean>('mcp.enabled', false);
     const mcpAvailable = await checkMcpExtension();
     
+    const baseDashboardUrl = config.get<string>('dashboardUrl') || 'http://localhost:1880/dashboard';
     let dashboardUrl: string;
+    
     if (mcpEnabled && mcpAvailable) {
-      const baseMcpUrl = config.get<string>('mcp.dashboardUrl') || 'http://localhost:1880/mcp';
-      dashboardUrl = appendProjectNameToUrl(baseMcpUrl);
+      dashboardUrl = appendProjectNameToUrl(baseDashboardUrl);
     } else {
-      dashboardUrl = config.get<string>('dashboardUrl') || 'http://localhost:1880/dashboard';
+      dashboardUrl = baseDashboardUrl;
     }
     
     openDashboard(context, dashboardUrl);
@@ -144,7 +214,7 @@ export async function activate(context: vscode.ExtensionContext) {
     // Get current settings
     const currentEnabled = config.get<boolean>('mcp.enabled', false);
     const currentServerUrl = config.get<string>('mcp.serverUrl', 'http://localhost:1880/mcp');
-    const currentDashboardUrl = config.get<string>('mcp.dashboardUrl', 'http://localhost:1880/mcp');
+    const currentDashboardUrl = config.get<string>('dashboardUrl', 'http://localhost:1880/dashboard');
     
     // Ask user if they want to enable MCP
     const enableChoice = await vscode.window.showQuickPick(
@@ -161,7 +231,7 @@ export async function activate(context: vscode.ExtensionContext) {
     if (enableChoice === undefined) return;
     
     if (enableChoice.value) {
-      // Configure MCP server URLs
+      // Configure MCP server URL
       const serverUrl = await vscode.window.showInputBox({
         title: 'AI-Ley MCP Server URL',
         prompt: 'Enter the AI-Ley MCP server URL',
@@ -178,30 +248,13 @@ export async function activate(context: vscode.ExtensionContext) {
       
       if (!serverUrl) return;
       
-      const dashboardUrl = await vscode.window.showInputBox({
-        title: 'AI-Ley MCP Dashboard URL',
-        prompt: 'Enter the AI-Ley MCP dashboard URL',
-        value: currentDashboardUrl,
-        validateInput: (value) => {
-          try {
-            new URL(value);
-            return null;
-          } catch {
-            return 'Please enter a valid URL';
-          }
-        }
-      });
-      
-      if (!dashboardUrl) return;
-      
       // Update configuration
       await config.update('mcp.enabled', true, vscode.ConfigurationTarget.Workspace);
       await config.update('mcp.serverUrl', serverUrl, vscode.ConfigurationTarget.Workspace);
-      await config.update('mcp.dashboardUrl', dashboardUrl, vscode.ConfigurationTarget.Workspace);
       
-      const finalDashboardUrl = appendProjectNameToUrl(dashboardUrl);
+      const finalDashboardUrl = appendProjectNameToUrl(currentDashboardUrl);
       vscode.window.showInformationMessage(`AI-Ley: MCP Server configured. Dashboard will include ProjectName=${getProjectName()}`);
-      vscode.window.showInformationMessage(`Final dashboard URL: ${finalDashboardUrl}`);
+      vscode.window.showInformationMessage(`Dashboard URL: ${finalDashboardUrl}`);
     } else {
       // Disable MCP
       await config.update('mcp.enabled', false, vscode.ConfigurationTarget.Workspace);
@@ -217,12 +270,13 @@ export async function activate(context: vscode.ExtensionContext) {
       const mcpEnabled = config.get<boolean>('mcp.enabled', false);
       const mcpAvailable = await checkMcpExtension();
       
+      const baseDashboardUrl = config.get<string>('dashboardUrl') || 'http://localhost:1880/dashboard';
       let newUrl: string;
+      
       if (mcpEnabled && mcpAvailable) {
-        const baseMcpUrl = config.get<string>('mcp.dashboardUrl') || 'http://localhost:1880/mcp';
-        newUrl = appendProjectNameToUrl(baseMcpUrl);
+        newUrl = appendProjectNameToUrl(baseDashboardUrl);
       } else {
-        newUrl = config.get<string>('dashboardUrl') || 'http://localhost:1880/dashboard';
+        newUrl = baseDashboardUrl;
       }
       
       vscode.window.showInformationMessage(`AI-Ley Dashboard URL changed to: ${newUrl}`);
@@ -266,6 +320,29 @@ export async function activate(context: vscode.ExtensionContext) {
       }
     }
   });
+
+  // Watch for workspace folder changes (when user opens a new folder)
+  vscode.workspace.onDidChangeWorkspaceFolders(async (event: vscode.WorkspaceFoldersChangeEvent) => {
+    // Handle added workspace folders
+    for (const folder of event.added) {
+      const workspaceRoot = folder.uri.fsPath;
+      const projectName = folder.name;
+      
+      // Check if AI-Ley should auto-initialize for this new workspace
+      const shouldInit = await shouldAutoInitialize(workspaceRoot, projectName);
+      
+      if (shouldInit) {
+        const isNew = !isAiLeyInitialized(workspaceRoot);
+        const message = isNew 
+          ? `AI-Ley: Auto-initializing for new project "${projectName}"`
+          : `AI-Ley: Auto-initializing for project "${projectName}"`;
+        vscode.window.showInformationMessage(message);
+        
+        // Initialize managers for the new workspace
+        await initializeManagers(context, workspaceRoot, syncStatus);
+      }
+    }
+  });
 }
 
 async function initializeManagers(
@@ -300,7 +377,7 @@ async function initializeManagers(
 
     updateScheduler = new UpdateScheduler(repoManager, configManager, syncStatus);
 
-    // Start the scheduler
+    // Start the scheduler (this will trigger initial sync and gitignore update)
     updateScheduler.start();
 
     console.log('AI-Ley managers initialized successfully');
@@ -319,15 +396,15 @@ async function initializeDashboard(context: vscode.ExtensionContext, status: vsc
   const mcpAvailable = await checkMcpExtension();
   
   let dashboardUrl: string;
+  const baseDashboardUrl = config.get<string>('dashboardUrl') || 'http://localhost:1880/dashboard';
   
   if (mcpEnabled && mcpAvailable) {
-    // Use MCP dashboard URL when MCP is enabled and available
-    const baseMcpUrl = config.get<string>('mcp.dashboardUrl') || 'http://localhost:1880/mcp';
-    dashboardUrl = appendProjectNameToUrl(baseMcpUrl);
+    // Append ProjectName parameter when MCP is enabled and available
+    dashboardUrl = appendProjectNameToUrl(baseDashboardUrl);
     vscode.window.showInformationMessage(`AI-Ley: Connected to MCP server for project: ${getProjectName()}`);
   } else {
-    // Use regular dashboard URL
-    dashboardUrl = config.get('dashboardUrl') || 'http://localhost:1880/dashboard';
+    // Use dashboard URL as-is
+    dashboardUrl = baseDashboardUrl;
     if (mcpEnabled && !mcpAvailable) {
       vscode.window.showWarningMessage('AI-Ley: MCP server enabled but extension not found');
     }
