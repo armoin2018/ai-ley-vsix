@@ -1,0 +1,161 @@
+{
+  "name": "ai-ley-dashboard",
+  "displayName": "AI-Ley Dashboard",
+  "description": "Automatically manages AI-Ley configurations and connects to the AI-Ley MCP dashboard. Syncs AI assistant configurations for GitHub Copilot, Claude, Gemini, Cursor, and more.",
+  "version": "2.0.0",
+  "publisher": "armoin",
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/armoin2018/node-red-contrib-ai-ley.git"
+  },
+  "homepage": "https://github.com/armoin2018/node-red-contrib-ai-ley#readme",
+  "bugs": {
+    "url": "https://github.com/armoin2018/node-red-contrib-ai-ley/issues"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "keywords": [
+    "ai",
+    "copilot",
+    "claude",
+    "gemini",
+    "cursor",
+    "ai-assistant",
+    "configuration",
+    "dashboard",
+    "node-red"
+  ],
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "workspaceContains:**"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "aiLey.openDashboard",
+        "title": "AI-Ley: Open Dashboard"
+      },
+      {
+        "command": "aiLey.syncConfigurations",
+        "title": "AI-Ley: Sync Configurations"
+      },
+      {
+        "command": "aiLey.forceUpdate",
+        "title": "AI-Ley: Force Update from Repository"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "AI-Ley Dashboard",
+      "properties": {
+        "aiLey.dashboardUrl": {
+          "type": "string",
+          "default": "http://localhost:1880/dashboard",
+          "description": "Base URL of the AI-Ley MCP dashboard."
+        },
+        "aiLey.repository.url": {
+          "type": "string",
+          "default": "https://github.com/armoin2018/ai-ley.git",
+          "description": "GitHub repository URL for AI-Ley configurations."
+        },
+        "aiLey.repository.branch": {
+          "type": "string",
+          "default": "main",
+          "description": "Branch to clone from the AI-Ley repository."
+        },
+        "aiLey.cache.directory": {
+          "type": "string",
+          "default": ".cache/ai-ley",
+          "description": "Local cache directory for AI-Ley repository (relative to workspace root)."
+        },
+        "aiLey.update.interval": {
+          "type": "number",
+          "default": 86400,
+          "description": "Interval in seconds to check for updates (0 to disable auto-update, default: 86400 = 24 hours)."
+        },
+        "aiLey.update.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable automatic updates from the AI-Ley repository."
+        },
+        "aiLey.agentic.githubCopilot": {
+          "type": "boolean",
+          "default": true,
+          "description": "Copy GitHub Copilot configuration files (.github/copilot-instructions.md)."
+        },
+        "aiLey.agentic.claude": {
+          "type": "boolean",
+          "default": true,
+          "description": "Copy Claude configuration files (CLAUDE.md, .claude/)."
+        },
+        "aiLey.agentic.gemini": {
+          "type": "boolean",
+          "default": true,
+          "description": "Copy Gemini configuration files (GEMINI.md, .gemini/)."
+        },
+        "aiLey.agentic.cursor": {
+          "type": "boolean",
+          "default": true,
+          "description": "Copy Cursor configuration files (.cursor/, cursor-config.json)."
+        },
+        "aiLey.agentic.windsurf": {
+          "type": "boolean",
+          "default": true,
+          "description": "Copy Windsurf configuration files (.windsurf/, windsurf-config.json)."
+        },
+        "aiLey.agentic.cline": {
+          "type": "boolean",
+          "default": true,
+          "description": "Copy Cline configuration files (.clinerules/)."
+        },
+        "aiLey.agentic.roo": {
+          "type": "boolean",
+          "default": true,
+          "description": "Copy Roo configuration files (.roorules/)."
+        },
+        "aiLey.agentic.codex": {
+          "type": "boolean",
+          "default": true,
+          "description": "Copy Codex configuration files (.codex/)."
+        },
+        "aiLey.agentic.opencode": {
+          "type": "boolean",
+          "default": true,
+          "description": "Copy OpenCode configuration files (.opencode/)."
+        },
+        "aiLey.agentic.metis": {
+          "type": "boolean",
+          "default": true,
+          "description": "Copy Metis configuration files (.metis/)."
+        },
+        "aiLey.agentic.generic": {
+          "type": "boolean",
+          "default": true,
+          "description": "Copy generic agent configuration files (AGENT.md, AGENTS.md)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "node-fetch": "^2.7.0",
+    "simple-git": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.18.0",
+    "@types/node-fetch": "^2.6.11",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0",
+    "vsce": "latest"
+  }
+}
