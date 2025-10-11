@@ -1,3 +1,4 @@
+import { promises as fsPromises } from 'fs';
 import fetch from 'node-fetch';
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -9,6 +10,67 @@ let currentPanel: vscode.WebviewPanel | undefined;
 let updateScheduler: UpdateScheduler | undefined;
 let repoManager: GitHubRepoManager | undefined;
 let configManager: ConfigurationManager | undefined;
+
+const MCP_CONFIG_FILENAME = 'mcp.json';
+const MCP_CONFIG_FOLDER = '.vscode';
+
+function getWorkspaceRoot(): string | undefined {
+  return vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0
+    ? vscode.workspace.workspaceFolders[0].uri.fsPath
+    : undefined;
+}
+
+async function fileExists(targetPath: string): Promise<boolean> {
+  try {
+    await fsPromises.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function writeMcpConfig(serverUrl: string): Promise<void> {
+  const workspaceRoot = getWorkspaceRoot();
+  if (!workspaceRoot) {
+    vscode.window.showWarningMessage('AI-Ley: Cannot create mcp.json without an open workspace');
+    return;
+  }
+
+  const vscodeDir = path.join(workspaceRoot, MCP_CONFIG_FOLDER);
+  const mcpPath = path.join(vscodeDir, MCP_CONFIG_FILENAME);
+
+  await fsPromises.mkdir(vscodeDir, { recursive: true });
+  const iconUrl = 'https://raw.githubusercontent.com/armoin2018/ai-ley/main/icon.png';
+
+  const mcpConfig = {
+    servers: {
+      'ai-ley': {
+        type: 'http',
+        url: serverUrl,
+        name: 'AI-Ley MCP Server',
+        description: 'AI-Ley Model Context Protocol server',
+        icon: iconUrl,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    }
+  };
+
+  await fsPromises.writeFile(mcpPath, JSON.stringify(mcpConfig, null, 2), 'utf8');
+}
+
+async function removeMcpConfig(): Promise<void> {
+  const workspaceRoot = getWorkspaceRoot();
+  if (!workspaceRoot) {
+    return;
+  }
+
+  const mcpPath = path.join(workspaceRoot, MCP_CONFIG_FOLDER, MCP_CONFIG_FILENAME);
+  if (await fileExists(mcpPath)) {
+    await fsPromises.unlink(mcpPath);
+  }
+}
 
 /**
  * Check if AI-Ley MCP extension is installed and active
@@ -251,6 +313,13 @@ export async function activate(context: vscode.ExtensionContext) {
       // Update configuration
       await config.update('mcp.enabled', true, vscode.ConfigurationTarget.Workspace);
       await config.update('mcp.serverUrl', serverUrl, vscode.ConfigurationTarget.Workspace);
+
+      try {
+        await writeMcpConfig(serverUrl);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        vscode.window.showErrorMessage(`AI-Ley: Failed to write mcp.json - ${errorMessage}`);
+      }
       
       const finalDashboardUrl = appendProjectNameToUrl(currentDashboardUrl);
       vscode.window.showInformationMessage(`AI-Ley: MCP Server configured. Dashboard will include ProjectName=${getProjectName()}`);
@@ -258,6 +327,12 @@ export async function activate(context: vscode.ExtensionContext) {
     } else {
       // Disable MCP
       await config.update('mcp.enabled', false, vscode.ConfigurationTarget.Workspace);
+      try {
+        await removeMcpConfig();
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        vscode.window.showErrorMessage(`AI-Ley: Failed to remove mcp.json - ${errorMessage}`);
+      }
       vscode.window.showInformationMessage('AI-Ley: MCP Server disabled');
     }
   });
@@ -269,6 +344,23 @@ export async function activate(context: vscode.ExtensionContext) {
       const config = vscode.workspace.getConfiguration('aiLey');
       const mcpEnabled = config.get<boolean>('mcp.enabled', false);
       const mcpAvailable = await checkMcpExtension();
+      const mcpServerUrl = config.get<string>('mcp.serverUrl', 'http://localhost:1880/mcp');
+
+      if (mcpEnabled) {
+        try {
+          await writeMcpConfig(mcpServerUrl);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          vscode.window.showErrorMessage(`AI-Ley: Failed to update mcp.json - ${errorMessage}`);
+        }
+      } else {
+        try {
+          await removeMcpConfig();
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          vscode.window.showErrorMessage(`AI-Ley: Failed to remove mcp.json - ${errorMessage}`);
+        }
+      }
       
       const baseDashboardUrl = config.get<string>('dashboardUrl') || 'http://localhost:1880/dashboard';
       let newUrl: string;

@@ -2,7 +2,7 @@
   "name": "ai-ley",
   "displayName": "AI-Ley",
   "description": "Automatically manages AI-Ley configurations and connects to the AI-Ley MCP dashboard. Syncs AI assistant configurations for GitHub Copilot, Claude, Gemini, Cursor, and more.",
-  "version": "2.2.3",
+  "version": "2.2.6",
   "publisher": "armoin",
   "icon": "icon.png",
   "repository": {
