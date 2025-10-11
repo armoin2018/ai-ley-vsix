@@ -1,6 +1,6 @@
 {
-  "name": "ai-ley-dashboard",
-  "displayName": "AI-Ley Dashboard",
+  "name": "ai-ley",
+  "displayName": "AI-Ley",
   "description": "Automatically manages AI-Ley configurations and connects to the AI-Ley MCP dashboard. Syncs AI assistant configurations for GitHub Copilot, Claude, Gemini, Cursor, and more.",
   "version": "2.0.0",
   "publisher": "armoin",
@@ -47,11 +47,15 @@
       {
         "command": "aiLey.forceUpdate",
         "title": "AI-Ley: Force Update from Repository"
+      },
+      {
+        "command": "aiLey.configureMcpServer",
+        "title": "AI-Ley: Configure MCP Server"
       }
     ],
     "configuration": {
       "type": "object",
-      "title": "AI-Ley Dashboard",
+      "title": "AI-Ley",
       "properties": {
         "aiLey.dashboardUrl": {
           "type": "string",
@@ -90,53 +94,73 @@
         },
         "aiLey.agentic.claude": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Copy Claude configuration files (CLAUDE.md, .claude/)."
         },
         "aiLey.agentic.gemini": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Copy Gemini configuration files (GEMINI.md, .gemini/)."
         },
         "aiLey.agentic.cursor": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Copy Cursor configuration files (.cursor/, cursor-config.json)."
         },
         "aiLey.agentic.windsurf": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Copy Windsurf configuration files (.windsurf/, windsurf-config.json)."
         },
         "aiLey.agentic.cline": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Copy Cline configuration files (.clinerules/)."
         },
         "aiLey.agentic.roo": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Copy Roo configuration files (.roorules/)."
         },
         "aiLey.agentic.codex": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Copy Codex configuration files (.codex/)."
         },
         "aiLey.agentic.opencode": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Copy OpenCode configuration files (.opencode/)."
         },
         "aiLey.agentic.metis": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Copy Metis configuration files (.metis/)."
         },
         "aiLey.agentic.generic": {
           "type": "boolean",
           "default": true,
           "description": "Copy generic agent configuration files (AGENT.md, AGENTS.md)."
+        },
+        "aiLey.mcp.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable AI-Ley MCP server integration."
+        },
+        "aiLey.mcp.serverUrl": {
+          "type": "string",
+          "default": "http://localhost:1880/mcp",
+          "description": "URL of the AI-Ley MCP server."
+        },
+        "aiLey.mcp.dashboardUrl": {
+          "type": "string",
+          "default": "http://localhost:1880/mcp",
+          "description": "URL of the AI-Ley MCP dashboard (used when MCP server is enabled). ProjectName parameter will be automatically appended."
+        },
+        "aiLey.gitignore.autoUpdate": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically update .gitignore with AI-Ley files and directories."
         }
       }
     }

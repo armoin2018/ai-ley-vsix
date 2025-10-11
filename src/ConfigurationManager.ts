@@ -322,12 +322,77 @@ export class ConfigurationManager {
       }
     }
 
+    // Update .gitignore if enabled
+    const config = vscode.workspace.getConfiguration('aiLey');
+    const autoUpdateGitignore = config.get<boolean>('gitignore.autoUpdate', true);
+    if (autoUpdateGitignore) {
+      try {
+        await this.updateGitignore();
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        vscode.window.showWarningMessage(`Failed to update .gitignore: ${errorMessage}`);
+      }
+    }
+
     if (totalUpdated > 0) {
       vscode.window.showInformationMessage(
         `AI-Ley: Synchronized ${totalUpdated} files successfully!`,
       );
     } else {
       vscode.window.showInformationMessage(`AI-Ley: All configurations are up to date.`);
+    }
+  }
+
+  /**
+   * Update .gitignore with AI-Ley related files and directories
+   */
+  public async updateGitignore(): Promise<void> {
+    const gitignorePath = path.join(this.workspaceRoot, '.gitignore');
+    
+    // Files and directories to ignore
+    const ignoreEntries = [
+      '# AI-Ley generated files',
+      '.ai-ley/',
+      '.cache/',
+      '.claude/',
+      '.gemini/',
+      '.cursor/',
+      '.windsurf/',
+      '.clinerules/',
+      '.roorules/',
+      '.codex/',
+      '.opencode/',
+      '.metis/',
+      'CLAUDE.md',
+      'GEMINI.md',
+      'AGENT.md',
+      'AGENTS.md',
+      'cursor-config.json',
+      'windsurf-config.json',
+      ''
+    ];
+
+    let gitignoreContent = '';
+    let existingContent = '';
+
+    // Read existing .gitignore if it exists
+    if (fs.existsSync(gitignorePath)) {
+      existingContent = fs.readFileSync(gitignorePath, 'utf8');
+      gitignoreContent = existingContent;
+    }
+
+    // Check if AI-Ley section already exists
+    const aileyMarker = '# AI-Ley generated files';
+    if (!gitignoreContent.includes(aileyMarker)) {
+      // Add AI-Ley section
+      if (gitignoreContent && !gitignoreContent.endsWith('\n')) {
+        gitignoreContent += '\n';
+      }
+      gitignoreContent += '\n' + ignoreEntries.join('\n');
+      
+      // Write updated .gitignore
+      fs.writeFileSync(gitignorePath, gitignoreContent);
+      vscode.window.showInformationMessage('AI-Ley: Updated .gitignore with AI-Ley files');
     }
   }
 
@@ -339,15 +404,15 @@ export class ConfigurationManager {
 
     return {
       githubCopilot: config.get<boolean>('githubCopilot', true),
-      claude: config.get<boolean>('claude', true),
-      gemini: config.get<boolean>('gemini', true),
-      cursor: config.get<boolean>('cursor', true),
-      windsurf: config.get<boolean>('windsurf', true),
-      cline: config.get<boolean>('cline', true),
-      roo: config.get<boolean>('roo', true),
-      codex: config.get<boolean>('codex', true),
-      opencode: config.get<boolean>('opencode', true),
-      metis: config.get<boolean>('metis', true),
+      claude: config.get<boolean>('claude', false),
+      gemini: config.get<boolean>('gemini', false),
+      cursor: config.get<boolean>('cursor', false),
+      windsurf: config.get<boolean>('windsurf', false),
+      cline: config.get<boolean>('cline', false),
+      roo: config.get<boolean>('roo', false),
+      codex: config.get<boolean>('codex', false),
+      opencode: config.get<boolean>('opencode', false),
+      metis: config.get<boolean>('metis', false),
       generic: config.get<boolean>('generic', true),
     };
   }

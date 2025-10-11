@@ -10,6 +10,62 @@ let updateScheduler: UpdateScheduler | undefined;
 let repoManager: GitHubRepoManager | undefined;
 let configManager: ConfigurationManager | undefined;
 
+/**
+ * Check if AI-Ley MCP extension is installed and active
+ */
+async function checkMcpExtension(): Promise<boolean> {
+  const mcpExtension = vscode.extensions.getExtension('armoin.ai-ley-mcp') || 
+                      vscode.extensions.getExtension('ai-ley-mcp') ||
+                      vscode.extensions.getExtension('ai-ley.mcp');
+  
+  if (mcpExtension) {
+    if (!mcpExtension.isActive) {
+      try {
+        await mcpExtension.activate();
+      } catch (error) {
+        console.log('Failed to activate AI-Ley MCP extension:', error);
+        return false;
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Get the current project/repository name
+ */
+function getProjectName(): string {
+  if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
+    return 'unknown-project';
+  }
+
+  const workspaceFolder = vscode.workspace.workspaceFolders[0];
+  const workspaceName = workspaceFolder.name;
+  
+  // Clean the project name to be URL-safe
+  return workspaceName.replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase();
+}
+
+/**
+ * Append ProjectName parameter to MCP URL
+ */
+function appendProjectNameToUrl(url: string): string {
+  try {
+    const urlObj = new URL(url);
+    const projectName = getProjectName();
+    
+    // Add ProjectName parameter
+    urlObj.searchParams.set('ProjectName', projectName);
+    
+    return urlObj.toString();
+  } catch (error) {
+    // If URL parsing fails, return original URL
+    console.error('Failed to parse MCP URL:', error);
+    return url;
+  }
+}
+
 export async function activate(context: vscode.ExtensionContext) {
   // Create and show a status bar item for dashboard
   const dashboardStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
@@ -38,7 +94,17 @@ export async function activate(context: vscode.ExtensionContext) {
   // Command to reopen dashboard manually
   const dashboardCmd = vscode.commands.registerCommand('aiLey.openDashboard', async () => {
     const config = vscode.workspace.getConfiguration('aiLey');
-    const dashboardUrl = config.get<string>('dashboardUrl') || 'http://localhost:1880/dashboard';
+    const mcpEnabled = config.get<boolean>('mcp.enabled', false);
+    const mcpAvailable = await checkMcpExtension();
+    
+    let dashboardUrl: string;
+    if (mcpEnabled && mcpAvailable) {
+      const baseMcpUrl = config.get<string>('mcp.dashboardUrl') || 'http://localhost:1880/mcp';
+      dashboardUrl = appendProjectNameToUrl(baseMcpUrl);
+    } else {
+      dashboardUrl = config.get<string>('dashboardUrl') || 'http://localhost:1880/dashboard';
+    }
+    
     openDashboard(context, dashboardUrl);
   });
   context.subscriptions.push(dashboardCmd);
@@ -71,11 +137,94 @@ export async function activate(context: vscode.ExtensionContext) {
   });
   context.subscriptions.push(forceUpdateCmd);
 
+  // Command to configure MCP server
+  const configureMcpCmd = vscode.commands.registerCommand('aiLey.configureMcpServer', async () => {
+    const config = vscode.workspace.getConfiguration('aiLey');
+    
+    // Get current settings
+    const currentEnabled = config.get<boolean>('mcp.enabled', false);
+    const currentServerUrl = config.get<string>('mcp.serverUrl', 'http://localhost:1880/mcp');
+    const currentDashboardUrl = config.get<string>('mcp.dashboardUrl', 'http://localhost:1880/mcp');
+    
+    // Ask user if they want to enable MCP
+    const enableChoice = await vscode.window.showQuickPick(
+      [
+        { label: 'Enable MCP Server', description: 'Connect to AI-Ley MCP Server', value: true },
+        { label: 'Disable MCP Server', description: 'Use standalone dashboard', value: false }
+      ],
+      { 
+        title: 'AI-Ley MCP Server Configuration',
+        placeHolder: currentEnabled ? 'MCP Server is currently enabled' : 'MCP Server is currently disabled'
+      }
+    );
+    
+    if (enableChoice === undefined) return;
+    
+    if (enableChoice.value) {
+      // Configure MCP server URLs
+      const serverUrl = await vscode.window.showInputBox({
+        title: 'AI-Ley MCP Server URL',
+        prompt: 'Enter the AI-Ley MCP server URL',
+        value: currentServerUrl,
+        validateInput: (value) => {
+          try {
+            new URL(value);
+            return null;
+          } catch {
+            return 'Please enter a valid URL';
+          }
+        }
+      });
+      
+      if (!serverUrl) return;
+      
+      const dashboardUrl = await vscode.window.showInputBox({
+        title: 'AI-Ley MCP Dashboard URL',
+        prompt: 'Enter the AI-Ley MCP dashboard URL',
+        value: currentDashboardUrl,
+        validateInput: (value) => {
+          try {
+            new URL(value);
+            return null;
+          } catch {
+            return 'Please enter a valid URL';
+          }
+        }
+      });
+      
+      if (!dashboardUrl) return;
+      
+      // Update configuration
+      await config.update('mcp.enabled', true, vscode.ConfigurationTarget.Workspace);
+      await config.update('mcp.serverUrl', serverUrl, vscode.ConfigurationTarget.Workspace);
+      await config.update('mcp.dashboardUrl', dashboardUrl, vscode.ConfigurationTarget.Workspace);
+      
+      const finalDashboardUrl = appendProjectNameToUrl(dashboardUrl);
+      vscode.window.showInformationMessage(`AI-Ley: MCP Server configured. Dashboard will include ProjectName=${getProjectName()}`);
+      vscode.window.showInformationMessage(`Final dashboard URL: ${finalDashboardUrl}`);
+    } else {
+      // Disable MCP
+      await config.update('mcp.enabled', false, vscode.ConfigurationTarget.Workspace);
+      vscode.window.showInformationMessage('AI-Ley: MCP Server disabled');
+    }
+  });
+  context.subscriptions.push(configureMcpCmd);
+
   // 🔄 Watch configuration changes
   vscode.workspace.onDidChangeConfiguration(async (event: vscode.ConfigurationChangeEvent) => {
-    if (event.affectsConfiguration('aiLey.dashboardUrl')) {
+    if (event.affectsConfiguration('aiLey.dashboardUrl') || event.affectsConfiguration('aiLey.mcp')) {
       const config = vscode.workspace.getConfiguration('aiLey');
-      const newUrl = config.get<string>('dashboardUrl') || 'http://localhost:1880/dashboard';
+      const mcpEnabled = config.get<boolean>('mcp.enabled', false);
+      const mcpAvailable = await checkMcpExtension();
+      
+      let newUrl: string;
+      if (mcpEnabled && mcpAvailable) {
+        const baseMcpUrl = config.get<string>('mcp.dashboardUrl') || 'http://localhost:1880/mcp';
+        newUrl = appendProjectNameToUrl(baseMcpUrl);
+      } else {
+        newUrl = config.get<string>('dashboardUrl') || 'http://localhost:1880/dashboard';
+      }
+      
       vscode.window.showInformationMessage(`AI-Ley Dashboard URL changed to: ${newUrl}`);
       if (currentPanel) {
         // Reload the dashboard with the new URL
@@ -164,7 +313,25 @@ async function initializeManagers(
 
 async function initializeDashboard(context: vscode.ExtensionContext, status: vscode.StatusBarItem) {
   const config = vscode.workspace.getConfiguration('aiLey');
-  let dashboardUrl: string = config.get('dashboardUrl') || 'http://localhost:1880/dashboard';
+  
+  // Check if MCP server is enabled and available
+  const mcpEnabled = config.get<boolean>('mcp.enabled', false);
+  const mcpAvailable = await checkMcpExtension();
+  
+  let dashboardUrl: string;
+  
+  if (mcpEnabled && mcpAvailable) {
+    // Use MCP dashboard URL when MCP is enabled and available
+    const baseMcpUrl = config.get<string>('mcp.dashboardUrl') || 'http://localhost:1880/mcp';
+    dashboardUrl = appendProjectNameToUrl(baseMcpUrl);
+    vscode.window.showInformationMessage(`AI-Ley: Connected to MCP server for project: ${getProjectName()}`);
+  } else {
+    // Use regular dashboard URL
+    dashboardUrl = config.get('dashboardUrl') || 'http://localhost:1880/dashboard';
+    if (mcpEnabled && !mcpAvailable) {
+      vscode.window.showWarningMessage('AI-Ley: MCP server enabled but extension not found');
+    }
+  }
 
   await updateStatus(status, dashboardUrl);
 
