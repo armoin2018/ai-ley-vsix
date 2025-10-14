@@ -2,7 +2,7 @@
   "name": "ai-ley",
   "displayName": "AI-Ley",
   "description": "Automatically manages AI-Ley configurations and connects to the AI-Ley MCP dashboard. Syncs AI assistant configurations for GitHub Copilot, Claude, Gemini, Cursor, and more.",
-  "version": "2.2.6",
+  "version": "2.2.8",
   "publisher": "armoin",
   "icon": "icon.png",
   "repository": {
@@ -61,140 +61,162 @@
           "type": "string",
           "default": "https://github.com/armoin2018/ai-ley.git",
           "description": "GitHub repository URL for AI-Ley configurations.",
-          "scope": "window"
+          "scope": "window",
+          "order": 0
         },
         "aiLey.repository.branch": {
           "type": "string",
           "default": "main",
           "description": "Branch to clone from the AI-Ley repository.",
-          "scope": "window"
-        },
-
-        "aiLey.gitignore.autoUpdate": {
-          "type": "boolean",
-          "default": true,
-          "description": "Automatically update .gitignore with AI-Ley files and directories.",
-          "scope": "window"
-        },
-        "aiLey.autoInit.newProjects": {
-          "type": "boolean",
-          "default": false,
-          "description": "Automatically initialize AI-Ley when a new project is opened (project without existing AI-Ley configuration).",
-          "scope": "application"
-        },
-        "aiLey.autoInit.existingProjects": {
-          "type": "boolean",
-          "default": false,
-          "description": "Automatically initialize AI-Ley for existing projects that match the pattern.",
-          "scope": "application"
-        },
-        "aiLey.autoInit.projectPattern": {
-          "type": "string",
-          "default": ".*",
-          "description": "Regex pattern to match project names for automatic AI-Ley initialization. Only applies when 'Auto Init: Existing Projects' is enabled.",
-          "scope": "application"
+          "scope": "window",
+          "order": 1
         },
         "aiLey.cache.directory": {
           "type": "string",
           "default": ".cache/ai-ley",
           "description": "Local cache directory for AI-Ley repository (relative to workspace root).",
-          "scope": "window"
+          "scope": "window",
+          "order": 2
         },
         "aiLey.update.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Enable automatic updates from the AI-Ley repository.",
-          "scope": "window"
+          "scope": "window",
+          "order": 10
         },
         "aiLey.update.interval": {
           "type": "number",
           "default": 86400,
           "description": "Interval in seconds to check for updates (0 to disable auto-update, default: 86400 = 24 hours).",
-          "scope": "window"
+          "scope": "window",
+          "order": 11
+        },
+        "aiLey.autoInit.newProjects": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically initialize AI-Ley when a new project is opened (project without existing AI-Ley configuration).",
+          "scope": "application",
+          "order": 20
+        },
+        "aiLey.autoInit.existingProjects": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically initialize AI-Ley for existing projects that match the pattern.",
+          "scope": "application",
+          "order": 21
+        },
+        "aiLey.autoInit.projectPattern": {
+          "type": "string",
+          "default": ".*",
+          "description": "Regex pattern to match project names for automatic AI-Ley initialization. Only applies when 'Auto Init: Existing Projects' is enabled.",
+          "scope": "application",
+          "order": 22
+        },
+        "aiLey.gitignore.autoUpdate": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically update .gitignore with AI-Ley files and directories.",
+          "scope": "window",
+          "order": 30
         },
         "aiLey.agentic.generic": {
           "type": "boolean",
           "default": true,
           "description": "Copy generic agent configuration files (AGENT.md, AGENTS.md).",
-          "scope": "window"
+          "scope": "window",
+          "order": 40
         },
         "aiLey.agentic.githubCopilot": {
           "type": "boolean",
           "default": true,
           "description": "Copy GitHub Copilot configuration files (.github/copilot-instructions.md).",
-          "scope": "window"
+          "scope": "window",
+          "order": 41
         },
         "aiLey.agentic.claude": {
           "type": "boolean",
           "default": false,
           "description": "Copy Claude configuration files (CLAUDE.md, .claude/).",
-          "scope": "window"
+          "scope": "window",
+          "order": 42
         },
         "aiLey.agentic.gemini": {
           "type": "boolean",
           "default": false,
           "description": "Copy Gemini configuration files (GEMINI.md, .gemini/).",
-          "scope": "window"
+          "scope": "window",
+          "order": 43
         },
         "aiLey.agentic.cursor": {
           "type": "boolean",
           "default": false,
           "description": "Copy Cursor configuration files (.cursor/, cursor-config.json).",
-          "scope": "window"
+          "scope": "window",
+          "order": 44
         },
         "aiLey.agentic.windsurf": {
           "type": "boolean",
           "default": false,
           "description": "Copy Windsurf configuration files (.windsurf/, windsurf-config.json).",
-          "scope": "window"
+          "scope": "window",
+          "order": 45
         },
         "aiLey.agentic.cline": {
           "type": "boolean",
           "default": false,
           "description": "Copy Cline configuration files (.clinerules/).",
-          "scope": "window"
+          "scope": "window",
+          "order": 46
         },
         "aiLey.agentic.roo": {
           "type": "boolean",
           "default": false,
           "description": "Copy Roo configuration files (.roorules/).",
-          "scope": "window"
+          "scope": "window",
+          "order": 47
         },
         "aiLey.agentic.codex": {
           "type": "boolean",
           "default": false,
           "description": "Copy Codex configuration files (.codex/).",
-          "scope": "window"
+          "scope": "window",
+          "order": 48
         },
         "aiLey.agentic.opencode": {
           "type": "boolean",
           "default": false,
           "description": "Copy OpenCode configuration files (.opencode/).",
-          "scope": "window"
+          "scope": "window",
+          "order": 49
         },
         "aiLey.agentic.metis": {
           "type": "boolean",
           "default": false,
           "description": "Copy Metis configuration files (.metis/).",
-          "scope": "window"
-        },
-        "aiLey.mcp.enabled": {
-          "type": "boolean",
-          "default": false,
-          "description": "Enable AI-Ley MCP server integration.",
-          "scope": "window"
-        },
-        "aiLey.mcp.serverUrl": {
-          "type": "string",
-          "default": "http://localhost:1880/mcp",
-          "description": "URL of the AI-Ley MCP server.",
-          "scope": "window"
+          "scope": "window",
+          "order": 50
         },
         "aiLey.dashboardUrl": {
           "type": "string",
           "default": "http://localhost:1880/dashboard",
           "description": "Base URL of the AI-Ley dashboard. When MCP is enabled, ProjectName parameter will be automatically appended.",
-          "scope": "window"
+          "scope": "window",
+          "order": 60
+        },
+        "aiLey.mcp.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable AI-Ley MCP server integration.",
+          "scope": "window",
+          "order": 61
+        },
+        "aiLey.mcp.serverUrl": {
+          "type": "string",
+          "default": "http://localhost:1880/mcp",
+          "description": "URL of the AI-Ley MCP server.",
+          "scope": "window",
+          "order": 62
         }
       }
     }

@@ -129,6 +129,40 @@ function appendProjectNameToUrl(url: string): string {
 }
 
 /**
+ * Check if current workspace is the parent ai-ley repository
+ */
+async function isParentAiLeyRepo(workspaceRoot: string): Promise<boolean> {
+  try {
+    const packageJsonPath = path.join(workspaceRoot, 'package.json');
+    if (await fileExists(packageJsonPath)) {
+      const content = await fsPromises.readFile(packageJsonPath, 'utf8');
+      const pkg = JSON.parse(content);
+      // Check if this is the ai-ley parent project
+      if (pkg.repository && typeof pkg.repository === 'object') {
+        const repoUrl = pkg.repository.url || '';
+        // Match exact repository: armoin2018/ai-ley (with or without .git)
+        return /armoin2018\/ai-ley(\.git)?$/i.test(repoUrl);
+      }
+      if (pkg.repository && typeof pkg.repository === 'string') {
+        // Match exact repository: armoin2018/ai-ley (with or without .git)
+        return /armoin2018\/ai-ley(\.git)?$/i.test(pkg.repository);
+      }
+    }
+    
+    // Also check .git/config for remote origin
+    const gitConfigPath = path.join(workspaceRoot, '.git', 'config');
+    if (await fileExists(gitConfigPath)) {
+      const gitConfig = await fsPromises.readFile(gitConfigPath, 'utf8');
+      // Match exact repository: armoin2018/ai-ley (with or without .git)
+      return /armoin2018\/ai-ley(\.git)?$/im.test(gitConfig);
+    }
+  } catch (error) {
+    console.error('Error checking if parent ai-ley repo:', error);
+  }
+  return false;
+}
+
+/**
  * Check if AI-Ley is already initialized in the workspace
  */
 function isAiLeyInitialized(workspaceRoot: string): boolean {
@@ -203,6 +237,19 @@ export async function activate(context: vscode.ExtensionContext) {
   if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
     const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
     const projectName = getProjectName();
+    
+    // Check if this is the parent ai-ley repository
+    const isParentRepo = await isParentAiLeyRepo(workspaceRoot);
+    
+    if (isParentRepo) {
+      // Don't modify files in the parent ai-ley repository
+      console.log('AI-Ley: Detected parent repository, skipping file modifications');
+      vscode.window.showInformationMessage('AI-Ley: Parent repository detected - extension will not modify files');
+      syncStatus.text = '$(info) AI-Ley: Parent Repo';
+      syncStatus.tooltip = 'Parent ai-ley repository detected - no modifications will be made';
+      dashboardStatus.hide();
+      return;
+    }
     
     // Check if AI-Ley should auto-initialize
     const shouldInit = await shouldAutoInitialize(workspaceRoot, projectName);
@@ -419,6 +466,15 @@ export async function activate(context: vscode.ExtensionContext) {
     for (const folder of event.added) {
       const workspaceRoot = folder.uri.fsPath;
       const projectName = folder.name;
+      
+      // Check if this is the parent ai-ley repository
+      const isParentRepo = await isParentAiLeyRepo(workspaceRoot);
+      
+      if (isParentRepo) {
+        console.log('AI-Ley: Detected parent repository in new workspace, skipping');
+        vscode.window.showInformationMessage('AI-Ley: Parent repository detected - extension will not modify files');
+        continue;
+      }
       
       // Check if AI-Ley should auto-initialize for this new workspace
       const shouldInit = await shouldAutoInitialize(workspaceRoot, projectName);
