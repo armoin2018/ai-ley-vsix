@@ -1,21 +1,25 @@
 import * as vscode from 'vscode';
 import { ConfigurationManager } from './ConfigurationManager';
 import { GitHubRepoManager } from './GitHubRepoManager';
+import { ContributionManager } from './ContributionManager';
 
 export class UpdateScheduler {
   private intervalHandle: NodeJS.Timeout | null = null;
   private lastUpdateTime: Date | null = null;
   private repoManager: GitHubRepoManager;
   private configManager: ConfigurationManager;
+  private contributionManager: ContributionManager;
   private statusBarItem: vscode.StatusBarItem;
 
   constructor(
     repoManager: GitHubRepoManager,
     configManager: ConfigurationManager,
+    contributionManager: ContributionManager,
     statusBarItem: vscode.StatusBarItem,
   ) {
     this.repoManager = repoManager;
     this.configManager = configManager;
+    this.contributionManager = contributionManager;
     this.statusBarItem = statusBarItem;
   }
 
@@ -98,6 +102,9 @@ export class UpdateScheduler {
         await this.syncConfigurations({ silent: true });
         this.updateStatusBar('Ready');
       }
+
+      // After sync, check for local changes to contribute back
+      await this.contributionManager.checkAndContribute();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('Update check failed:', errorMessage);

@@ -18,6 +18,7 @@ PACKAGING_SUCCESS.md
 # Core AI-Ley
 .ai-ley/
 .cache/
+.my/
 
 # AI Assistant configurations
 .github/copilot-instructions.md

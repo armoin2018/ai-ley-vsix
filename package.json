@@ -2,7 +2,7 @@
   "name": "ai-ley",
   "displayName": "AI-Ley",
   "description": "Automatically manages AI-Ley configurations and connects to the AI-Ley MCP dashboard. Syncs AI assistant configurations for GitHub Copilot, Claude, Gemini, Cursor, and more.",
-  "version": "2.2.8",
+  "version": "2.2.9",
   "publisher": "armoin",
   "icon": "icon.png",
   "repository": {
@@ -91,6 +91,13 @@
           "description": "Interval in seconds to check for updates (0 to disable auto-update, default: 86400 = 24 hours).",
           "scope": "window",
           "order": 11
+        },
+        "aiLey.contribute.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable contributing back updates to the AI-Ley repository when local changes are detected in .ai-ley/shared.",
+          "scope": "window",
+          "order": 12
         },
         "aiLey.autoInit.newProjects": {
           "type": "boolean",

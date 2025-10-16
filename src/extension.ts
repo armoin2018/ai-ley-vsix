@@ -5,11 +5,13 @@ import * as vscode from 'vscode';
 import { ConfigurationManager } from './ConfigurationManager';
 import { GitHubRepoManager } from './GitHubRepoManager';
 import { UpdateScheduler } from './UpdateScheduler';
+import { ContributionManager } from './ContributionManager';
 
 let currentPanel: vscode.WebviewPanel | undefined;
 let updateScheduler: UpdateScheduler | undefined;
 let repoManager: GitHubRepoManager | undefined;
 let configManager: ConfigurationManager | undefined;
+let contributionManager: ContributionManager | undefined;
 
 const MCP_CONFIG_FILENAME = 'mcp.json';
 const MCP_CONFIG_FOLDER = '.vscode';
@@ -523,7 +525,9 @@ async function initializeManagers(
 
     configManager = new ConfigurationManager(workspaceRoot, cachePath);
 
-    updateScheduler = new UpdateScheduler(repoManager, configManager, syncStatus);
+    contributionManager = new ContributionManager(workspaceRoot, cachePath, repoManager);
+
+    updateScheduler = new UpdateScheduler(repoManager, configManager, contributionManager, syncStatus);
 
     // Start the scheduler (this will trigger initial sync and gitignore update)
     updateScheduler.start();
@@ -638,4 +642,5 @@ export function deactivate() {
   updateScheduler = undefined;
   repoManager = undefined;
   configManager = undefined;
+  contributionManager = undefined;
 }

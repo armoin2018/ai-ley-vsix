@@ -160,4 +160,88 @@ export class GitHubRepoManager {
   public getRepoPath(): string {
     return this.config.localPath;
   }
+
+  /**
+   * Create a new branch in the repository
+   */
+  public async createBranch(branchName: string): Promise<void> {
+    try {
+      const repoGit = simpleGit(this.config.localPath);
+      
+      // Ensure we're on the main branch first
+      await repoGit.checkout(this.config.branch);
+      
+      // Create and checkout new branch
+      await repoGit.checkoutLocalBranch(branchName);
+      
+      console.log(`Created branch: ${branchName}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`Failed to create branch ${branchName}:`, errorMessage);
+      throw error;
+    }
+  }
+
+  /**
+   * Commit changes in a specific path
+   */
+  public async commitChanges(pathPattern: string, message: string): Promise<void> {
+    try {
+      const repoGit = simpleGit(this.config.localPath);
+      
+      // Add files
+      await repoGit.add(pathPattern);
+      
+      // Commit with message
+      await repoGit.commit(message);
+      
+      console.log(`Committed changes: ${message}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`Failed to commit changes:`, errorMessage);
+      throw error;
+    }
+  }
+
+  /**
+   * Push a branch to remote
+   */
+  public async pushBranch(branchName: string): Promise<void> {
+    try {
+      const repoGit = simpleGit(this.config.localPath);
+      
+      // Push branch to origin
+      await repoGit.push(['origin', branchName, '--set-upstream']);
+      
+      console.log(`Pushed branch: ${branchName}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`Failed to push branch ${branchName}:`, errorMessage);
+      throw error;
+    }
+  }
+
+  /**
+   * Checkout main branch and sync with remote
+   */
+  public async checkoutMainAndSync(): Promise<void> {
+    try {
+      const repoGit = simpleGit(this.config.localPath);
+      
+      // Checkout main branch
+      await repoGit.checkout(this.config.branch);
+      
+      // Fetch latest changes
+      await repoGit.fetch(['origin', this.config.branch]);
+      
+      // Reset to remote branch
+      await repoGit.reset(['--hard', `origin/${this.config.branch}`]);
+      
+      console.log(`Checked out and synced ${this.config.branch}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`Failed to checkout and sync main:`, errorMessage);
+      throw error;
+    }
+  }
 }
