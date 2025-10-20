@@ -1,0 +1,52 @@
+# Build artifacts
+.vscode/**
+.vscode-test/**
+dist/**/*.map
+src/**
+tsconfig.json
+node_modules/**
+.gitignore
+.npmrc
+
+# Test files
+**/.eslintrc.json
+**/*.map
+**/tsconfig.json
+
+# Documentation (keep only essentials)
+AUTO_INIT_FEATURE.md
+CONFIGURATION.md
+CONTRIBUTION_FEATURE.md
+ICON_ADDED.md
+IMPLEMENTATION_SUMMARY.md
+QUICKSTART.md
+RELEASE_NOTES_*.md
+REQUIREMENTS.md
+setup.sh
+AGENT.md
+AGENTS.md
+
+# Cache and temporary files
+.cache/**
+.ai-ley/**
+.github/**
+.DS_Store
+*.vsix
+*.log
+
+# Development files
+.editorconfig
+.prettierrc
+.eslintrc*
+webpack.config.js
+yarn.lock
+package-lock.json
+
+# Keep these
+!README.md
+!CHANGELOG.md
+!LICENSE
+!icon.png
+!dist/extension.js
+!dist/**/*.js
+!package.json

@@ -44,11 +44,17 @@ export class ConfigurationManager {
         target: '.ai-ley',
         type: 'directory',
       },
-      // GitHub Copilot
+      // Project folder - always copied
       {
-        source: '.github/copilot-instructions.md',
-        target: '.github/copilot-instructions.md',
-        type: 'file',
+        source: '.project',
+        target: '.project',
+        type: 'directory',
+      },
+      // GitHub Copilot - copy entire .github directory
+      {
+        source: '.github',
+        target: '.github',
+        type: 'directory',
         condition: (config) => config.githubCopilot,
       },
       // Claude
@@ -424,9 +430,13 @@ export class ConfigurationManager {
       '# Core AI-Ley',
       '.ai-ley/',
       '.cache/',
+      '.project/',
       '',
       '# AI Assistant configurations',
       '.github/copilot-instructions.md',
+      '.github/chatmodes/',
+      '.github/prompts/',
+      '.github/copilot-instructions/',
       'CLAUDE.md',
       '.claude/',
       'GEMINI.md',

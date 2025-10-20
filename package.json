@@ -2,16 +2,21 @@
   "name": "ai-ley",
   "displayName": "AI-Ley",
   "description": "Automatically manages AI-Ley configurations and connects to the AI-Ley MCP dashboard. Syncs AI assistant configurations for GitHub Copilot, Claude, Gemini, Cursor, and more.",
-  "version": "2.2.9",
-  "publisher": "armoin",
+  "version": "2.4.2",
+  "publisher": "ArmoinLLC",
+  "license": "CC0-1.0",
   "icon": "icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/armoin2018/node-red-contrib-ai-ley.git"
+    "url": "https://github.com/armoin2018/ai-ley-vsix.git"
   },
-  "homepage": "https://github.com/armoin2018/node-red-contrib-ai-ley#readme",
+  "homepage": "https://github.com/armoin2018/ai-ley-vsix#readme",
   "bugs": {
-    "url": "https://github.com/armoin2018/node-red-contrib-ai-ley/issues"
+    "url": "https://github.com/armoin2018/ai-ley-vsix/issues"
+  },
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
   },
   "engines": {
     "vscode": "^1.85.0"
@@ -28,10 +33,11 @@
     "node-red"
   ],
   "categories": [
-    "Other"
+    "Other",
+    "Programming Languages"
   ],
   "activationEvents": [
-    "workspaceContains:**"
+    "onStartupFinished"
   ],
   "main": "./dist/extension.js",
   "contributes": {
