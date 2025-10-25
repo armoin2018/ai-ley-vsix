@@ -1,4 +1,5 @@
 import { promises as fsPromises } from 'fs';
+import * as fs from 'fs';
 import fetch from 'node-fetch';
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -7,14 +8,104 @@ import { GitHubRepoManager } from './GitHubRepoManager';
 import { UpdateScheduler } from './UpdateScheduler';
 import { ContributionManager } from './ContributionManager';
 
+// Log immediately when module loads
+console.log('');
+console.log('╔════════════════════════════════════════════════════════════════╗');
+console.log('║  AI-LEY EXTENSION MODULE LOADED                                ║');
+console.log('╚════════════════════════════════════════════════════════════════╝');
+console.log('');
+
 let currentPanel: vscode.WebviewPanel | undefined;
-let updateScheduler: UpdateScheduler | undefined;
-let repoManager: GitHubRepoManager | undefined;
-let configManager: ConfigurationManager | undefined;
-let contributionManager: ContributionManager | undefined;
+
+interface WorkspaceServices {
+  updateScheduler?: UpdateScheduler;
+  repoManager?: GitHubRepoManager;
+  configManager?: ConfigurationManager;
+  contributionManager?: ContributionManager;
+  logFilePath?: string;
+  logInitialized?: boolean;
+}
+
+const workspaceServices = new Map<string, WorkspaceServices>();
 
 const MCP_CONFIG_FILENAME = 'mcp.json';
 const MCP_CONFIG_FOLDER = '.vscode';
+
+/**
+ * Retrieve or create the service container for a workspace.
+ */
+function getWorkspaceServices(workspaceRoot: string): WorkspaceServices {
+  let services = workspaceServices.get(workspaceRoot);
+  if (!services) {
+    services = {};
+    workspaceServices.set(workspaceRoot, services);
+  }
+  return services;
+}
+
+/**
+ * Initialize logging for the workspace
+ */
+function initializeLogging(workspaceRoot: string): void {
+  const services = getWorkspaceServices(workspaceRoot);
+
+  try {
+    const logFilePath = path.join(workspaceRoot, 'ai-ley.log');
+    const timestamp = new Date().toISOString();
+    const header = `${'='.repeat(80)}\n[${timestamp}] AI-Ley Extension Session Started\n[${timestamp}] Workspace: ${workspaceRoot}\n[${timestamp}] Log File: ${logFilePath}\n${'='.repeat(80)}\n`;
+
+    // Check if workspace root exists and is writable
+    if (!fs.existsSync(workspaceRoot)) {
+      console.error(`[AI-Ley] Workspace root does not exist: ${workspaceRoot}`);
+      services.logInitialized = false;
+      return;
+    }
+
+    fs.writeFileSync(logFilePath, header, 'utf8');
+    services.logFilePath = logFilePath;
+    services.logInitialized = true;
+
+    console.log(`[AI-Ley] Logging initialized: ${logFilePath}`);
+    log(`Logging initialized successfully`, workspaceRoot);
+  } catch (error) {
+    services.logInitialized = false;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`[AI-Ley] Failed to initialize logging for ${workspaceRoot}:`, errorMessage);
+    console.error('[AI-Ley] Error details:', error);
+  }
+}
+
+/**
+ * Log message to ai-ley.log file in workspace
+ */
+function log(message: string, workspaceRoot?: string): void {
+  if (!workspaceRoot) {
+    logGlobal(message);
+    return;
+  }
+
+  const services = workspaceServices.get(workspaceRoot);
+  if (!services || !services.logInitialized || !services.logFilePath) {
+    // Fall back to console if logging not initialized
+    console.log(`[AI-Ley][${workspaceRoot}] ${message}`);
+    return;
+  }
+
+  const timestamp = new Date().toISOString();
+  const logMessage = `[${timestamp}] ${message}\n`;
+
+  try {
+    fs.appendFileSync(services.logFilePath, logMessage, 'utf8');
+  } catch (error) {
+    // Silently fall back to console
+    console.log(`[AI-Ley][${workspaceRoot}] ${message}`);
+  }
+}
+
+function logGlobal(message: string): void {
+  const timestamp = new Date().toISOString();
+  console.log(`[AI-Ley][${timestamp}] ${message}`);
+}
 
 function getWorkspaceRoot(): string | undefined {
   return vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0
@@ -170,10 +261,26 @@ async function isParentAiLeyRepo(workspaceRoot: string): Promise<boolean> {
 function isAiLeyInitialized(workspaceRoot: string): boolean {
   const fs = require('fs');
   const aiLeyPath = path.join(workspaceRoot, '.ai-ley');
-  const cachePath = path.join(workspaceRoot, '.cache', 'ai-ley');
   
-  // Check if either .ai-ley directory or cache exists
-  return fs.existsSync(aiLeyPath) || fs.existsSync(cachePath);
+  // Check if .ai-ley directory exists (the main indicator)
+  return fs.existsSync(aiLeyPath);
+}
+
+/**
+ * Check if the cache directory exists (using configured cache directory)
+ */
+function hasCacheDirectory(workspaceRoot: string, workspaceFolder?: vscode.WorkspaceFolder): boolean {
+  const configurationScope = workspaceFolder ? workspaceFolder.uri : undefined;
+  const config = vscode.workspace.getConfiguration('aiLey', configurationScope);
+  const cacheDir = config.get<string>('cache.directory') || '.cache/ai-ley';
+  
+  // Resolve cache directory path
+  const cachePath = path.isAbsolute(cacheDir) ? cacheDir : path.join(workspaceRoot, cacheDir);
+  
+  const exists = fs.existsSync(cachePath);
+  log(`Cache directory check: ${cachePath} - Exists: ${exists}`, workspaceRoot);
+  
+  return exists;
 }
 
 /**
@@ -192,80 +299,282 @@ function projectMatchesPattern(projectName: string, pattern: string): boolean {
 /**
  * Check if AI-Ley should auto-initialize for this workspace
  */
-async function shouldAutoInitialize(workspaceRoot: string, projectName: string): Promise<boolean> {
-  const config = vscode.workspace.getConfiguration('aiLey');
+async function shouldAutoInitialize(
+  workspaceRoot: string,
+  projectName: string,
+  workspaceFolder: vscode.WorkspaceFolder,
+): Promise<boolean> {
+  log('=== shouldAutoInitialize START ===', workspaceRoot);
+  log(`Workspace: ${workspaceRoot}`, workspaceRoot);
+  log(`Project Name: ${projectName}`, workspaceRoot);
   
+  const config = vscode.workspace.getConfiguration('aiLey', workspaceFolder.uri);
   const isInitialized = isAiLeyInitialized(workspaceRoot);
+  const hasCache = hasCacheDirectory(workspaceRoot, workspaceFolder);
   
+  log(`Is Initialized (.ai-ley exists): ${isInitialized}`, workspaceRoot);
+  log(`Has Cache: ${hasCache}`, workspaceRoot);
+  
+  // New project - check if auto-init is enabled for new projects
   if (!isInitialized) {
-    // New project - check if auto-init is enabled for new projects
     const autoInitNew = config.get<boolean>('autoInit.newProjects', false);
+    log(`Auto-init for new projects: ${autoInitNew}`, workspaceRoot);
+    
     if (autoInitNew) {
-      console.log('Auto-initializing AI-Ley for new project:', projectName);
+      log('✓ SHOULD INITIALIZE: New project with auto-init enabled', workspaceRoot);
+      log('=== shouldAutoInitialize END ===', workspaceRoot);
       return true;
     }
+    
+    log('✗ SHOULD NOT INITIALIZE: New project but auto-init disabled', workspaceRoot);
+    log('=== shouldAutoInitialize END ===', workspaceRoot);
+    return false;
+  }
+  
+  // Existing project - check if auto-init is enabled for existing projects
+  const autoInitExisting = config.get<boolean>('autoInit.existingProjects', false);
+  log(`Auto-init for existing projects: ${autoInitExisting}`, workspaceRoot);
+  
+  if (!autoInitExisting) {
+    log('✗ SHOULD NOT INITIALIZE: Existing project but auto-init disabled', workspaceRoot);
+    log('=== shouldAutoInitialize END ===', workspaceRoot);
+    return false;
+  }
+  
+  // Check if project matches the pattern
+  const pattern = config.get<string>('autoInit.projectPattern', '.*');
+  log(`Project pattern: ${pattern}`, workspaceRoot);
+  
+  const matches = projectMatchesPattern(projectName, pattern);
+  log(`Project matches pattern: ${matches}`, workspaceRoot);
+  
+  if (!matches) {
+    log('✗ SHOULD NOT INITIALIZE: Project does not match pattern', workspaceRoot);
+    log('=== shouldAutoInitialize END ===', workspaceRoot);
+    return false;
+  }
+  
+  // At this point: existing project, auto-init enabled, pattern matches
+  // Initialize if cache is missing or always (based on logic)
+  if (!hasCache) {
+    log('✓ SHOULD INITIALIZE: Existing project with missing cache', workspaceRoot);
   } else {
-    // Existing project with AI-Ley - check if auto-init is enabled for existing projects
+    log('✓ SHOULD INITIALIZE: Existing project with auto-init enabled and pattern matched', workspaceRoot);
+  }
+  
+  log('=== shouldAutoInitialize END ===', workspaceRoot);
+  return true;
+}
+
+/**
+ * Check workspace for missing cache and trigger deployment if needed
+ */
+async function checkForMissingCache(
+  context: vscode.ExtensionContext, 
+  syncStatus: vscode.StatusBarItem,
+  specificWorkspace?: string
+): Promise<void> {
+  logGlobal('=== checkForMissingCache START ===');
+  
+  if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
+    logGlobal('No workspace folders open');
+    logGlobal('=== checkForMissingCache END ===');
+    return;
+  }
+
+  // Determine which workspaces to check
+  const foldersToCheck = specificWorkspace 
+    ? vscode.workspace.workspaceFolders.filter(f => f.uri.fsPath === specificWorkspace)
+    : vscode.workspace.workspaceFolders;
+
+  logGlobal(`Checking ${foldersToCheck.length} workspace folder(s)`);
+
+  for (const folder of foldersToCheck) {
+    const workspaceRoot = folder.uri.fsPath;
+    const projectName = folder.name;
+    
+  log(`\nChecking workspace: ${workspaceRoot}`, workspaceRoot);
+  log(`Project Name: ${projectName}`, workspaceRoot);
+
+    // Skip if parent repository
+    const isParent = await isParentAiLeyRepo(workspaceRoot);
+  log(`Is parent repository: ${isParent}`, workspaceRoot);
+    
+    if (isParent) {
+      log('Skipping parent repository', workspaceRoot);
+      continue;
+    }
+
+    // Check if auto-init for existing projects is enabled
+    const config = vscode.workspace.getConfiguration('aiLey', folder.uri);
     const autoInitExisting = config.get<boolean>('autoInit.existingProjects', false);
-    if (autoInitExisting) {
+    
+  log(`Auto-init for existing projects: ${autoInitExisting}`, workspaceRoot);
+    
+    if (!autoInitExisting) {
+      log('Auto-init for existing projects is disabled', workspaceRoot);
+      continue;
+    }
+
+    // Check if project has .ai-ley but is missing cache
+    const isInitialized = isAiLeyInitialized(workspaceRoot);
+  const hasCache = hasCacheDirectory(workspaceRoot, folder);
+    
+  log(`Is initialized (.ai-ley exists): ${isInitialized}`, workspaceRoot);
+  log(`Has cache: ${hasCache}`, workspaceRoot);
+
+    if (isInitialized && !hasCache) {
       const pattern = config.get<string>('autoInit.projectPattern', '.*');
-      if (projectMatchesPattern(projectName, pattern)) {
-        console.log('Auto-initializing AI-Ley for existing project matching pattern:', projectName);
-        return true;
+      const matches = projectMatchesPattern(projectName, pattern);
+      
+  log(`Project pattern: ${pattern}`, workspaceRoot);
+  log(`Project matches pattern: ${matches}`, workspaceRoot);
+      
+      if (matches) {
+        log('✓ DEPLOYING CACHE: Missing cache detected for existing project', workspaceRoot);
+        vscode.window.showInformationMessage(`AI-Ley: Deploying missing cache for project "${projectName}"`);
+        
+        // Trigger force update to deploy cache
+        const services = workspaceServices.get(workspaceRoot);
+        if (services?.updateScheduler) {
+          await services.updateScheduler.forceUpdate();
+          log('Force update completed', workspaceRoot);
+        } else {
+          log('ERROR: updateScheduler not available', workspaceRoot);
+        }
+      } else {
+        log('✗ NOT DEPLOYING: Project does not match pattern', workspaceRoot);
+      }
+    } else {
+      if (!isInitialized) {
+        log('✗ NOT DEPLOYING: Project not initialized (.ai-ley missing)', workspaceRoot);
+      }
+      if (hasCache) {
+        log('✗ NOT DEPLOYING: Cache already exists', workspaceRoot);
       }
     }
   }
   
-  return false;
+  logGlobal('=== checkForMissingCache END ===');
 }
 
 export async function activate(context: vscode.ExtensionContext) {
+  console.log('');
+  console.log('╔════════════════════════════════════════════════════════════════╗');
+  console.log('║  AI-LEY: EXTENSION ACTIVATION STARTED                          ║');
+  console.log('╚════════════════════════════════════════════════════════════════╝');
+  console.log('');
+  logGlobal('AI-Ley Extension Activation Started');
+
   // Create and show a status bar item for dashboard
   const dashboardStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   dashboardStatus.text = '$(globe) AI-Ley: Connecting...';
-  dashboardStatus.tooltip = `Connecting to AI-Ley dashboard`;
+  dashboardStatus.tooltip = 'Click to open AI-Ley dashboard';
+  dashboardStatus.command = 'aiLey.openDashboard';
   dashboardStatus.show();
   context.subscriptions.push(dashboardStatus);
+  console.log('  ✓ AI-LEY: Dashboard status bar item created and shown');
 
   // Create and show a status bar item for configuration sync
   const syncStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
   syncStatus.text = '$(sync) AI-Ley: Initializing...';
-  syncStatus.tooltip = 'Click to force update AI-Ley configurations';
-  syncStatus.command = 'aiLey.forceUpdate';
+  syncStatus.tooltip = 'Click to sync AI-Ley configurations';
+  syncStatus.command = 'aiLey.syncConfigurations';
   syncStatus.show();
   context.subscriptions.push(syncStatus);
+  console.log('  ✓ AI-LEY: Sync status bar item created and shown');
 
-  // Initialize managers if workspace is available
+  // Create and show a status bar item for force update
+  const updateStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 98);
+  updateStatus.text = '$(cloud-download) AI-Ley';
+  updateStatus.tooltip = 'Click to force update from repository';
+  updateStatus.command = 'aiLey.forceUpdate';
+  updateStatus.show();
+  context.subscriptions.push(updateStatus);
+  console.log('  ✓ AI-LEY: Update status bar item created and shown');
+
+  // Create and show a status bar item for manual refresh with status
+  const refreshStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  refreshStatus.text = '$(sync~spin) AI-Ley: Starting...';
+  refreshStatus.tooltip = 'AI-Ley is starting up...';
+  refreshStatus.command = 'aiLey.refresh';
+  refreshStatus.show();
+  context.subscriptions.push(refreshStatus);
+  console.log('  ✓ AI-LEY: Refresh status bar item created and shown');
+
+  // Initialize logging and managers for ALL workspace folders
   if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
-    const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
-    const projectName = getProjectName();
+  logGlobal(`Found ${vscode.workspace.workspaceFolders.length} workspace folder(s)`);
     
-    // Check if this is the parent ai-ley repository
-    const isParentRepo = await isParentAiLeyRepo(workspaceRoot);
+    let processedCount = 0;
+    const totalFolders = vscode.workspace.workspaceFolders.length;
     
-    if (isParentRepo) {
-      // Don't modify files in the parent ai-ley repository
-      console.log('AI-Ley: Detected parent repository, skipping file modifications');
-      vscode.window.showInformationMessage('AI-Ley: Parent repository detected - extension will not modify files');
-      syncStatus.text = '$(info) AI-Ley: Parent Repo';
-      syncStatus.tooltip = 'Parent ai-ley repository detected - no modifications will be made';
-      dashboardStatus.hide();
-      return;
+    for (const folder of vscode.workspace.workspaceFolders) {
+      const workspaceRoot = folder.uri.fsPath;
+      const projectName = folder.name;
+      
+      processedCount++;
+      
+  // Initialize logging for this workspace before logging messages
+  initializeLogging(workspaceRoot);
+
+      // Update refresh status to show progress
+      refreshStatus.text = `$(sync~spin) AI-Ley: Initializing (${processedCount}/${totalFolders})`;
+      refreshStatus.tooltip = `Processing workspace: ${projectName}`;
+      
+  log(`\n${'='.repeat(80)}`, workspaceRoot);
+  log(`Processing workspace: ${workspaceRoot}`, workspaceRoot);
+  log(`Project name: ${projectName}`, workspaceRoot);
+      
+      // Log configuration for this workspace
+      const config = vscode.workspace.getConfiguration('aiLey', folder.uri);
+  log(`Configuration - Cache Directory: ${config.get<string>('cache.directory', '.cache/ai-ley')}`, workspaceRoot);
+  log(`Configuration - Auto-init New Projects: ${config.get<boolean>('autoInit.newProjects', false)}`, workspaceRoot);
+  log(`Configuration - Auto-init Existing Projects: ${config.get<boolean>('autoInit.existingProjects', false)}`, workspaceRoot);
+  log(`Configuration - Project Pattern: ${config.get<string>('autoInit.projectPattern', '.*')}`, workspaceRoot);
+      
+      // Check if this is the parent ai-ley repository
+      const isParentRepo = await isParentAiLeyRepo(workspaceRoot);
+  log(`Is parent ai-ley repository: ${isParentRepo}`, workspaceRoot);
+      
+      if (isParentRepo) {
+        // Don't modify files in the parent ai-ley repository
+        log('Parent repository detected - skipping file modifications', workspaceRoot);
+        continue;
+      }
+      
+      // Check if AI-Ley should auto-initialize
+      const shouldInit = await shouldAutoInitialize(workspaceRoot, projectName, folder);
+      log(`Should auto-initialize: ${shouldInit}`, workspaceRoot);
+      
+      // Initialize managers for this workspace
+      await initializeManagers(context, workspaceRoot, syncStatus, shouldInit, folder);
+      
+      if (shouldInit) {
+        // Show notification about auto-initialization
+        const isNew = !isAiLeyInitialized(workspaceRoot);
+        const message = isNew 
+          ? `AI-Ley: Auto-initializing for new project "${projectName}"`
+          : `AI-Ley: Auto-initializing for project "${projectName}"`;
+        log(`Showing notification: ${message}`, workspaceRoot);
+        vscode.window.showInformationMessage(message);
+      }
+
+      // Perform immediate cache check on activation
+      log('Performing immediate cache check on activation', workspaceRoot);
+      await checkForMissingCache(context, syncStatus, workspaceRoot);
+      
+      log(`Finished processing workspace: ${workspaceRoot}`, workspaceRoot);
     }
     
-    // Check if AI-Ley should auto-initialize
-    const shouldInit = await shouldAutoInitialize(workspaceRoot, projectName);
-    
-    if (shouldInit) {
-      // Show notification about auto-initialization
-      const isNew = !isAiLeyInitialized(workspaceRoot);
-      const message = isNew 
-        ? `AI-Ley: Auto-initializing for new project "${projectName}"`
-        : `AI-Ley: Auto-initializing for project "${projectName}"`;
-      vscode.window.showInformationMessage(message);
-    }
-    
-    await initializeManagers(context, workspaceRoot, syncStatus);
+    // Set final ready state
+    refreshStatus.text = '$(refresh) AI-Ley';
+    refreshStatus.tooltip = 'Click to refresh AI-Ley (check cache and sync configurations)';
+    logGlobal('All workspaces processed - AI-Ley ready');
+  } else {
+    logGlobal('No workspace folders available');
+    refreshStatus.text = '$(refresh) AI-Ley';
+    refreshStatus.tooltip = 'Click to refresh AI-Ley (check cache and sync configurations)';
   }
 
   // Load initial config and connect
@@ -292,31 +601,166 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Command to sync configurations manually
   const syncCmd = vscode.commands.registerCommand('aiLey.syncConfigurations', async () => {
-    if (!configManager) {
+    if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
       vscode.window.showErrorMessage('AI-Ley: No workspace folder open');
       return;
     }
 
-    try {
-      const agenticConfig = ConfigurationManager.getAgenticConfig();
-      await configManager.syncConfigurations(agenticConfig);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      vscode.window.showErrorMessage(`AI-Ley sync failed: ${errorMessage}`);
+    const agenticConfig = ConfigurationManager.getAgenticConfig();
+    const failures: string[] = [];
+
+    await Promise.all(
+      vscode.workspace.workspaceFolders.map(async (folder) => {
+        const workspaceRoot = folder.uri.fsPath;
+        const services = workspaceServices.get(workspaceRoot);
+
+        if (!services?.configManager) {
+          const message = 'Config manager not available for manual sync';
+          log(message, workspaceRoot);
+          failures.push(`${folder.name}: ${message}`);
+          return;
+        }
+
+        try {
+          await services.configManager.syncConfigurations(agenticConfig);
+          log('Manual configuration sync completed', workspaceRoot);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          log(`ERROR in manual sync: ${errorMessage}`, workspaceRoot);
+          failures.push(`${folder.name}: ${errorMessage}`);
+        }
+      }),
+    );
+
+    if (failures.length > 0) {
+      vscode.window.showErrorMessage(`AI-Ley sync failed for: ${failures.join('; ')}`);
+    } else {
+      vscode.window.showInformationMessage('AI-Ley: Configurations synced for all workspaces');
     }
   });
   context.subscriptions.push(syncCmd);
 
   // Command to force update from repository
   const forceUpdateCmd = vscode.commands.registerCommand('aiLey.forceUpdate', async () => {
-    if (!updateScheduler) {
+    if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
       vscode.window.showErrorMessage('AI-Ley: No workspace folder open');
       return;
     }
 
-    await updateScheduler.forceUpdate();
+    const failures: string[] = [];
+
+    await Promise.all(
+      vscode.workspace.workspaceFolders.map(async (folder) => {
+        const workspaceRoot = folder.uri.fsPath;
+        const services = workspaceServices.get(workspaceRoot);
+
+        if (!services?.updateScheduler) {
+          const message = 'Update scheduler not available';
+          log(message, workspaceRoot);
+          failures.push(`${folder.name}: ${message}`);
+          return;
+        }
+
+        try {
+          log('Manual force update started', workspaceRoot);
+          await services.updateScheduler.forceUpdate();
+          log('Manual force update completed', workspaceRoot);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          log(`ERROR in manual force update: ${errorMessage}`, workspaceRoot);
+          failures.push(`${folder.name}: ${errorMessage}`);
+        }
+      }),
+    );
+
+    if (failures.length > 0) {
+      vscode.window.showErrorMessage(`AI-Ley force update failed for: ${failures.join('; ')}`);
+    } else {
+      vscode.window.showInformationMessage('AI-Ley: Force update completed for all workspaces');
+    }
   });
   context.subscriptions.push(forceUpdateCmd);
+
+  // Command to refresh (check cache and sync)
+  const refreshCmd = vscode.commands.registerCommand('aiLey.refresh', async () => {
+    logGlobal('=== aiLey.refresh command triggered ===');
+    
+    if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
+      logGlobal('ERROR: No workspace folder open');
+      vscode.window.showWarningMessage('AI-Ley: No workspace folder open');
+      return;
+    }
+
+    try {
+      // Update status to show refresh in progress
+      refreshStatus.text = '$(sync~spin) AI-Ley: Refreshing...';
+      refreshStatus.tooltip = 'Refreshing AI-Ley configurations...';
+      
+      logGlobal(`Refresh started for ${vscode.workspace.workspaceFolders.length} workspace(s)`);
+      vscode.window.showInformationMessage('AI-Ley: Refreshing all workspaces...');
+      
+      // Check for missing cache and deploy if needed for ALL workspaces
+      await checkForMissingCache(context, syncStatus);
+      
+      // Update status during force update
+      refreshStatus.text = '$(sync~spin) AI-Ley: Updating...';
+      refreshStatus.tooltip = 'Updating from repository...';
+      
+      // Also run force update to ensure everything is synced
+      const failures: string[] = [];
+      await Promise.all(
+        vscode.workspace.workspaceFolders.map(async (folder) => {
+          const workspaceRoot = folder.uri.fsPath;
+          const services = workspaceServices.get(workspaceRoot);
+
+          if (!services?.updateScheduler) {
+            const message = 'Update scheduler not available during refresh';
+            log(message, workspaceRoot);
+            failures.push(`${folder.name}: ${message}`);
+            return;
+          }
+
+          try {
+            log('Running force update during refresh', workspaceRoot);
+            await services.updateScheduler.forceUpdate();
+            log('Force update during refresh completed', workspaceRoot);
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            log(`ERROR in refresh force update: ${errorMessage}`, workspaceRoot);
+            failures.push(`${folder.name}: ${errorMessage}`);
+          }
+        }),
+      );
+      
+      // Reset status to ready
+      refreshStatus.text = '$(refresh) AI-Ley';
+      refreshStatus.tooltip = 'Click to refresh AI-Ley (check cache and sync configurations)';
+      
+      if (failures.length > 0) {
+        logGlobal(`Refresh completed with errors: ${failures.join('; ')}`);
+        vscode.window.showErrorMessage(`AI-Ley refresh completed with errors: ${failures.join('; ')}`);
+      } else {
+        logGlobal('Refresh completed successfully');
+        vscode.window.showInformationMessage('AI-Ley: Refresh completed!');
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logGlobal(`ERROR in refresh: ${errorMessage}`);
+      
+      // Reset status even on error
+      refreshStatus.text = '$(warning) AI-Ley';
+      refreshStatus.tooltip = `Error: ${errorMessage}. Click to retry.`;
+      
+      vscode.window.showErrorMessage(`AI-Ley refresh failed: ${errorMessage}`);
+      
+      // Reset to normal after 5 seconds
+      setTimeout(() => {
+        refreshStatus.text = '$(refresh) AI-Ley';
+        refreshStatus.tooltip = 'Click to refresh AI-Ley (check cache and sync configurations)';
+      }, 5000);
+    }
+  });
+  context.subscriptions.push(refreshCmd);
 
   // Command to configure MCP server
   const configureMcpCmd = vscode.commands.registerCommand('aiLey.configureMcpServer', async () => {
@@ -429,7 +873,7 @@ export async function activate(context: vscode.ExtensionContext) {
         openDashboard(context, newUrl);
       }
       // Update status bar
-      await updateStatus(dashboardStatus, newUrl);
+      await updateDashboardStatus(dashboardStatus, newUrl);
     }
 
     // Restart scheduler if update settings change
@@ -437,17 +881,30 @@ export async function activate(context: vscode.ExtensionContext) {
       event.affectsConfiguration('aiLey.update.enabled') ||
       event.affectsConfiguration('aiLey.update.interval')
     ) {
-      if (updateScheduler) {
-        updateScheduler.restart();
+      for (const [workspaceRoot, services] of workspaceServices.entries()) {
+        if (services.updateScheduler) {
+          log('Restarting update scheduler due to configuration change', workspaceRoot);
+          services.updateScheduler.restart();
+        }
       }
     }
 
     // Re-sync if agentic settings change
     if (event.affectsConfiguration('aiLey.agentic')) {
-      if (configManager) {
-        const agenticConfig = ConfigurationManager.getAgenticConfig();
-        await configManager.syncConfigurations(agenticConfig);
-      }
+      const agenticConfig = ConfigurationManager.getAgenticConfig();
+      await Promise.all(
+        Array.from(workspaceServices.entries()).map(async ([workspaceRoot, services]) => {
+          if (services.configManager) {
+            try {
+              log('Agentic configuration changed - re-syncing', workspaceRoot);
+              await services.configManager.syncConfigurations(agenticConfig);
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              log(`ERROR re-syncing agentic configuration: ${errorMessage}`, workspaceRoot);
+            }
+          }
+        }),
+      );
     }
 
     // Reinitialize managers if repository settings change
@@ -455,42 +912,72 @@ export async function activate(context: vscode.ExtensionContext) {
       event.affectsConfiguration('aiLey.repository') ||
       event.affectsConfiguration('aiLey.cache.directory')
     ) {
-      if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
-        const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
-        await initializeManagers(context, workspaceRoot, syncStatus);
+      if (vscode.workspace.workspaceFolders) {
+        for (const folder of vscode.workspace.workspaceFolders) {
+          await initializeManagers(context, folder.uri.fsPath, syncStatus, false, folder);
+        }
       }
     }
   });
 
   // Watch for workspace folder changes (when user opens a new folder)
   vscode.workspace.onDidChangeWorkspaceFolders(async (event: vscode.WorkspaceFoldersChangeEvent) => {
+    logGlobal('=== Workspace folders changed ===');
+    logGlobal(`Added: ${event.added.length}, Removed: ${event.removed.length}`);
+
+    // Handle removed workspace folders
+    for (const folder of event.removed) {
+      const workspaceRoot = folder.uri.fsPath;
+      const services = workspaceServices.get(workspaceRoot);
+      if (services?.updateScheduler) {
+        services.updateScheduler.stop();
+        log('Stopped update scheduler for removed workspace', workspaceRoot);
+      }
+      workspaceServices.delete(workspaceRoot);
+    }
+
     // Handle added workspace folders
     for (const folder of event.added) {
       const workspaceRoot = folder.uri.fsPath;
       const projectName = folder.name;
-      
+
+      // Initialize logging for this workspace before recording logs
+      initializeLogging(workspaceRoot);
+
+      log(`\n${'='.repeat(80)}`, workspaceRoot);
+      log(`New workspace added: ${workspaceRoot}`, workspaceRoot);
+      log(`Project name: ${projectName}`, workspaceRoot);
+
       // Check if this is the parent ai-ley repository
       const isParentRepo = await isParentAiLeyRepo(workspaceRoot);
-      
+      log(`Is parent ai-ley repository: ${isParentRepo}`, workspaceRoot);
+
       if (isParentRepo) {
-        console.log('AI-Ley: Detected parent repository in new workspace, skipping');
+        log('Parent repository detected - skipping', workspaceRoot);
         vscode.window.showInformationMessage('AI-Ley: Parent repository detected - extension will not modify files');
         continue;
       }
-      
+
       // Check if AI-Ley should auto-initialize for this new workspace
-      const shouldInit = await shouldAutoInitialize(workspaceRoot, projectName);
-      
+      const shouldInit = await shouldAutoInitialize(workspaceRoot, projectName, folder);
+      log(`Should auto-initialize: ${shouldInit}`, workspaceRoot);
+
       if (shouldInit) {
         const isNew = !isAiLeyInitialized(workspaceRoot);
-        const message = isNew 
+        const message = isNew
           ? `AI-Ley: Auto-initializing for new project "${projectName}"`
           : `AI-Ley: Auto-initializing for project "${projectName}"`;
+        log(`Showing notification: ${message}`, workspaceRoot);
         vscode.window.showInformationMessage(message);
-        
-        // Initialize managers for the new workspace
-        await initializeManagers(context, workspaceRoot, syncStatus);
+
+        // Initialize managers for the new workspace with forced sync
+        await initializeManagers(context, workspaceRoot, syncStatus, shouldInit, folder);
+
+        // Perform immediate cache check for newly added workspace
+        await checkForMissingCache(context, syncStatus, workspaceRoot);
       }
+
+      log(`Finished processing new workspace: ${workspaceRoot}`, workspaceRoot);
     }
   });
 }
@@ -499,42 +986,68 @@ async function initializeManagers(
   context: vscode.ExtensionContext,
   workspaceRoot: string,
   syncStatus: vscode.StatusBarItem,
+  forceInitialSync: boolean = false,
+  workspaceFolder?: vscode.WorkspaceFolder,
 ): Promise<void> {
   try {
+    log('=== initializeManagers START ===', workspaceRoot);
+    log(`Force initial sync: ${forceInitialSync}`, workspaceRoot);
+
+    const services = getWorkspaceServices(workspaceRoot);
+
     // Stop existing scheduler if any
-    if (updateScheduler) {
-      updateScheduler.stop();
+    if (services.updateScheduler) {
+      services.updateScheduler.stop();
+      log('Stopped existing update scheduler', workspaceRoot);
     }
 
-    // Get configuration
-    const config = vscode.workspace.getConfiguration('aiLey');
+    // Get configuration scoped to workspace
+    const config = vscode.workspace.getConfiguration('aiLey', workspaceFolder?.uri);
     const repoUrl =
       config.get<string>('repository.url') || 'https://github.com/armoin2018/ai-ley.git';
     const repoBranch = config.get<string>('repository.branch') || 'main';
     const cacheDir = config.get<string>('cache.directory') || '.cache/ai-ley';
 
+    log(`Repository URL: ${repoUrl}`, workspaceRoot);
+    log(`Repository Branch: ${repoBranch}`, workspaceRoot);
+    log(`Cache Directory (configured): ${cacheDir}`, workspaceRoot);
+
     // Resolve cache directory path
     const cachePath = path.isAbsolute(cacheDir) ? cacheDir : path.join(workspaceRoot, cacheDir);
+    
+    log(`Cache Path (resolved): ${cachePath}`, workspaceRoot);
+    log(`Cache exists: ${fs.existsSync(cachePath)}`, workspaceRoot);
 
     // Initialize managers
-    repoManager = new GitHubRepoManager({
+    const repoManager = new GitHubRepoManager({
       url: repoUrl,
       branch: repoBranch,
       localPath: cachePath,
     });
 
-    configManager = new ConfigurationManager(workspaceRoot, cachePath);
+    const configManager = new ConfigurationManager(workspaceRoot, cachePath);
 
-    contributionManager = new ContributionManager(workspaceRoot, cachePath, repoManager);
+    const contributionManager = new ContributionManager(workspaceRoot, cachePath, repoManager);
 
-    updateScheduler = new UpdateScheduler(repoManager, configManager, contributionManager, syncStatus);
+    const updateScheduler = new UpdateScheduler(repoManager, configManager, contributionManager, syncStatus);
+
+    services.repoManager = repoManager;
+    services.configManager = configManager;
+    services.contributionManager = contributionManager;
+    services.updateScheduler = updateScheduler;
+
+    log('Managers initialized', workspaceRoot);
 
     // Start the scheduler (this will trigger initial sync and gitignore update)
-    updateScheduler.start();
+    updateScheduler.start(forceInitialSync);
+    
+    log('Update scheduler started', workspaceRoot);
+    log('=== initializeManagers END ===', workspaceRoot);
 
-    console.log('AI-Ley managers initialized successfully');
+    log('AI-Ley managers initialized successfully', workspaceRoot);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
+    log(`ERROR in initializeManagers: ${errorMessage}`, workspaceRoot);
     console.error('Failed to initialize AI-Ley managers:', errorMessage);
     vscode.window.showErrorMessage(`AI-Ley initialization failed: ${errorMessage}`);
   }
@@ -562,7 +1075,7 @@ async function initializeDashboard(context: vscode.ExtensionContext, status: vsc
     }
   }
 
-  await updateStatus(status, dashboardUrl);
+  await updateDashboardStatus(status, dashboardUrl);
 
   // Auto-open dashboard when a workspace is active
   if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
@@ -570,7 +1083,7 @@ async function initializeDashboard(context: vscode.ExtensionContext, status: vsc
   }
 }
 
-async function updateStatus(status: vscode.StatusBarItem, dashboardUrl: string) {
+async function updateDashboardStatus(status: vscode.StatusBarItem, dashboardUrl: string) {
   const reachable = await checkDashboardUrl(dashboardUrl);
   if (!reachable) {
     // Try HTTPS fallback
@@ -633,14 +1146,13 @@ function getWebviewHtml(url: string): string {
 }
 
 export function deactivate() {
-  // Stop the update scheduler
-  if (updateScheduler) {
-    updateScheduler.stop();
+  for (const [workspaceRoot, services] of workspaceServices.entries()) {
+    if (services.updateScheduler) {
+      services.updateScheduler.stop();
+      log('Stopped update scheduler during deactivate', workspaceRoot);
+    }
   }
 
+  workspaceServices.clear();
   currentPanel = undefined;
-  updateScheduler = undefined;
-  repoManager = undefined;
-  configManager = undefined;
-  contributionManager = undefined;
 }

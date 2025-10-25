@@ -26,7 +26,7 @@ export class UpdateScheduler {
   /**
    * Starts the update scheduler
    */
-  public start(): void {
+  public start(forceInitialSync: boolean = false): void {
     const config = vscode.workspace.getConfiguration('aiLey.update');
     const enabled = config.get<boolean>('enabled', true);
     const interval = config.get<number>('interval', 86400); // Default: 24 hours
@@ -42,14 +42,14 @@ export class UpdateScheduler {
     // Clear any existing interval
     this.stop();
 
-    // Run initial check
-    this.checkAndUpdate().catch((error) => {
+    // Run initial check (with force flag if needed)
+    this.checkAndUpdate(forceInitialSync).catch((error) => {
       console.error('Initial update check failed:', error);
     });
 
     // Set up recurring check
     this.intervalHandle = setInterval(() => {
-      this.checkAndUpdate().catch((error) => {
+      this.checkAndUpdate(false).catch((error) => {
         console.error('Scheduled update check failed:', error);
       });
     }, intervalMs);
@@ -71,7 +71,7 @@ export class UpdateScheduler {
   /**
    * Checks for updates and applies them if available
    */
-  private async checkAndUpdate(): Promise<void> {
+  private async checkAndUpdate(forceSync: boolean = false): Promise<void> {
     try {
       this.updateStatusBar('Checking for updates...');
 
@@ -82,6 +82,18 @@ export class UpdateScheduler {
         await this.syncConfigurations();
         this.lastUpdateTime = new Date();
         this.updateStatusBar('Ready');
+        return;
+      }
+
+      // If force sync is requested (e.g., for auto-init), ensure repo is updated and sync configs
+      if (forceSync) {
+        this.updateStatusBar('Initializing...');
+        await this.repoManager.ensureRepository();
+        await this.syncConfigurations();
+        this.lastUpdateTime = new Date();
+        this.updateStatusBar('Ready');
+        // After sync, check for local changes to contribute back
+        await this.contributionManager.checkAndContribute();
         return;
       }
 

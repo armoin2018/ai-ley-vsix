@@ -2,7 +2,7 @@
   "name": "ai-ley",
   "displayName": "AI-Ley",
   "description": "Automatically manages AI-Ley configurations and connects to the AI-Ley MCP dashboard. Syncs AI assistant configurations for GitHub Copilot, Claude, Gemini, Cursor, and more.",
-  "version": "2.4.2",
+  "version": "2.6.6",
   "publisher": "ArmoinLLC",
   "license": "CC0-1.0",
   "icon": "icon.png",
@@ -44,21 +44,78 @@
     "commands": [
       {
         "command": "aiLey.openDashboard",
-        "title": "AI-Ley: Open Dashboard"
+        "title": "AI-Ley: Open Dashboard",
+        "category": "AI-Ley"
       },
       {
         "command": "aiLey.syncConfigurations",
-        "title": "AI-Ley: Sync Configurations"
+        "title": "AI-Ley: Sync Configurations",
+        "category": "AI-Ley"
       },
       {
         "command": "aiLey.forceUpdate",
-        "title": "AI-Ley: Force Update from Repository"
+        "title": "AI-Ley: Force Update from Repository",
+        "category": "AI-Ley"
+      },
+      {
+        "command": "aiLey.refresh",
+        "title": "AI-Ley: Refresh (Check Cache & Sync)",
+        "category": "AI-Ley"
       },
       {
         "command": "aiLey.configureMcpServer",
-        "title": "AI-Ley: Configure MCP Server"
+        "title": "AI-Ley: Configure MCP Server",
+        "category": "AI-Ley"
       }
     ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "aiLey.openDashboard",
+          "when": "true"
+        },
+        {
+          "command": "aiLey.syncConfigurations",
+          "when": "true"
+        },
+        {
+          "command": "aiLey.forceUpdate",
+          "when": "true"
+        },
+        {
+          "command": "aiLey.refresh",
+          "when": "true"
+        },
+        {
+          "command": "aiLey.configureMcpServer",
+          "when": "true"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "aiLey.refresh",
+          "group": "aiLey@1",
+          "when": "true"
+        },
+        {
+          "command": "aiLey.syncConfigurations",
+          "group": "aiLey@2",
+          "when": "true"
+        },
+        {
+          "command": "aiLey.forceUpdate",
+          "group": "aiLey@3",
+          "when": "true"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "aiLey.refresh",
+          "group": "aiLey@1",
+          "when": "true"
+        }
+      ]
+    },
     "configuration": {
       "type": "object",
       "title": "AI-Ley",
