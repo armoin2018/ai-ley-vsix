@@ -2,6 +2,81 @@
 
 A VS Code extension that provides seamless integration with the AI-Ley project, automatically managing AI assistant configurations and providing dashboard access.
 
+## 🚀 Quick Start - Basic Workflow
+
+AI-Ley provides a structured approach to building applications with AI assistance. Here's the typical user flow:
+
+### 1️⃣ **Define Requirements**
+Update `.project/REQUIREMENTS.md` with your project requirements, then formalize them:
+```
+/requirements
+```
+This command processes and formalizes your requirements into a structured format.
+
+### 2️⃣ **Innovation Cycle**
+Run through an LLM innovation cycle to explore creative solutions:
+```
+/innovate
+```
+Generates innovative approaches and solutions based on your requirements.
+
+### 3️⃣ **Research & Learn**
+Research the web and integrate discoveries:
+```
+/learn
+```
+Searches for relevant information, best practices, and integrates innovations into your project.
+
+### 4️⃣ **Design Phase**
+Design your application architecture:
+```
+/build-design
+```
+Creates the application design based on requirements and research.
+
+### 5️⃣ **Architecture Phase**
+Define the technical architecture:
+```
+/build-architecture
+```
+Establishes the architectural patterns and structure.
+
+### 6️⃣ **Refine Requirements**
+Review and refine requirements with new insights:
+```
+/requirements
+```
+Update requirements based on design and architecture decisions.
+
+### 7️⃣ **Create Execution Plan**
+Build a detailed implementation plan:
+```
+/plan
+```
+Generates a step-by-step execution plan in `.project/PLAN.md`.
+
+### 8️⃣ **Execute the Plan**
+Start executing the plan:
+```
+/run
+```
+Begin executing the plan step by step.
+
+Continue execution with:
+```
+/run-next
+```
+Use multiple times to progress through each step until completion.
+
+### 💡 **Add Requests Anytime**
+Add additional requests or modifications during the process:
+```
+/ask {your request}
+```
+Automatically updates `REQUIREMENTS.md` and `PLAN.md` (or `.project/plan`) with your new requirements.
+
+---
+
 ## Features
 
 ### 🔄 Automatic Configuration Sync

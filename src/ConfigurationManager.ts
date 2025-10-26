@@ -216,9 +216,37 @@ export class ConfigurationManager {
   }
 
   /**
-   * Copy a file from source to target
+   * Create a backup of an existing file
    */
-  private async copyFile(sourcePath: string, targetPath: string): Promise<void> {
+  private createBackup(filePath: string): string | null {
+    if (!fs.existsSync(filePath)) {
+      return null;
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupPath = `${filePath}.backup-${timestamp}`;
+    
+    try {
+      fs.copyFileSync(filePath, backupPath);
+      return backupPath;
+    } catch (error) {
+      console.error(`Failed to create backup for ${filePath}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Check if a file is in the .project directory and should be protected
+   */
+  private isProtectedProjectFile(filePath: string): boolean {
+    const relativePath = path.relative(this.workspaceRoot, filePath);
+    return relativePath.startsWith('.project' + path.sep) && fs.existsSync(filePath);
+  }
+
+  /**
+   * Copy a file from source to target with safety measures
+   */
+  private async copyFile(sourcePath: string, targetPath: string, createBackups: boolean = true): Promise<void> {
     const targetDir = path.dirname(targetPath);
 
     // Ensure target directory exists
@@ -236,6 +264,14 @@ export class ConfigurationManager {
     }
 
     if (needsUpdate) {
+      // Create backup for protected project files
+      if (createBackups && this.isProtectedProjectFile(targetPath)) {
+        const backupPath = this.createBackup(targetPath);
+        if (backupPath) {
+          console.log(`AI-Ley: Created backup of existing file: ${backupPath}`);
+        }
+      }
+      
       fs.copyFileSync(sourcePath, targetPath);
       return;
     }
@@ -274,12 +310,13 @@ export class ConfigurationManager {
   }
 
   /**
-   * Copy a directory recursively from source to target
+   * Copy a directory recursively from source to target with safety measures
    */
   private async copyDirectory(
     sourcePath: string,
     targetPath: string,
     skipCheck: boolean = false,
+    createBackups: boolean = true,
   ): Promise<number> {
     let updatedCount = 0;
 
@@ -305,7 +342,7 @@ export class ConfigurationManager {
       }
 
       if (entry.isDirectory()) {
-        updatedCount += await this.copyDirectory(sourceEntryPath, targetEntryPath, skipCheck);
+        updatedCount += await this.copyDirectory(sourceEntryPath, targetEntryPath, skipCheck, createBackups);
       } else if (entry.isFile()) {
         const sourceHash = this.calculateMD5(sourceEntryPath);
         let needsUpdate = true;
@@ -316,7 +353,15 @@ export class ConfigurationManager {
         }
 
         if (needsUpdate) {
-          await this.copyFile(sourceEntryPath, targetEntryPath);
+          // Create backup for protected project files
+          if (createBackups && this.isProtectedProjectFile(targetEntryPath)) {
+            const backupPath = this.createBackup(targetEntryPath);
+            if (backupPath) {
+              console.log(`AI-Ley: Created backup of existing file: ${backupPath}`);
+            }
+          }
+          
+          await this.copyFile(sourceEntryPath, targetEntryPath, false); // Don't double-backup
           updatedCount++;
         }
       }
@@ -326,16 +371,22 @@ export class ConfigurationManager {
   }
 
   /**
-   * Synchronize configurations based on user settings
+   * Synchronize configurations based on user settings with enhanced safety measures
    */
   public async syncConfigurations(
     agenticConfig: AgenticConfig,
-    options: { silent?: boolean } = {},
+    options: { silent?: boolean; createBackups?: boolean } = {},
   ): Promise<void> {
     const silent = options.silent ?? false;
+    const createBackups = options.createBackups ?? true;
     const mappings = this.getFileMappings();
     let totalUpdated = 0;
     let totalRemoved = 0;
+    let backupsCreated = 0;
+
+    // Get backup configuration from settings
+    const config = vscode.workspace.getConfiguration('aiLey');
+    const enableBackups = config.get<boolean>('safety.createBackups', true) && createBackups;
 
     for (const mapping of mappings) {
       const targetPath = path.join(this.workspaceRoot, mapping.target);
@@ -354,10 +405,10 @@ export class ConfigurationManager {
 
         try {
           if (mapping.type === 'file') {
-            await this.copyFile(sourcePath, targetPath);
+            await this.copyFile(sourcePath, targetPath, enableBackups);
             totalUpdated++;
           } else if (mapping.type === 'directory') {
-            const count = await this.copyDirectory(sourcePath, targetPath);
+            const count = await this.copyDirectory(sourcePath, targetPath, false, enableBackups);
             totalUpdated += count;
           }
         } catch (error) {
@@ -365,9 +416,9 @@ export class ConfigurationManager {
           vscode.window.showWarningMessage(`Failed to copy ${mapping.source}: ${errorMessage}`);
         }
       } else {
-        // Remove files when disabled (except .ai-ley which is always kept)
-        if (mapping.source === '.ai-ley') {
-          continue; // Never remove core .ai-ley directory
+        // Remove files when disabled (except .ai-ley and .project which are always kept)
+        if (mapping.source === '.ai-ley' || mapping.source === '.project') {
+          continue; // Never remove core directories
         }
         
         try {
@@ -388,7 +439,6 @@ export class ConfigurationManager {
     }
 
     // Update .gitignore if enabled
-    const config = vscode.workspace.getConfiguration('aiLey');
     const autoUpdateGitignore = config.get<boolean>('gitignore.autoUpdate', true);
     if (autoUpdateGitignore) {
       try {
@@ -406,6 +456,9 @@ export class ConfigurationManager {
     }
     if (totalRemoved > 0) {
       messages.push(`${totalRemoved} files/directories removed`);
+    }
+    if (enableBackups && backupsCreated > 0) {
+      messages.push(`${backupsCreated} backups created`);
     }
 
     if (messages.length > 0) {
@@ -484,6 +537,61 @@ export class ConfigurationManager {
     } else {
       console.log('AI-Ley: .gitignore already contains AI-Ley entries, skipping update');
     }
+  }
+
+  /**
+   * Clean up old backup files (older than 7 days by default)
+   */
+  public async cleanupOldBackups(maxAgeInDays: number = 7): Promise<number> {
+    let cleanedCount = 0;
+    const maxAgeMs = maxAgeInDays * 24 * 60 * 60 * 1000;
+    const now = Date.now();
+
+    const findBackupFiles = (dirPath: string): string[] => {
+      const backupFiles: string[] = [];
+      
+      if (!fs.existsSync(dirPath)) {
+        return backupFiles;
+      }
+
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        const fullPath = path.join(dirPath, entry.name);
+        
+        if (entry.isDirectory()) {
+          backupFiles.push(...findBackupFiles(fullPath));
+        } else if (entry.isFile() && entry.name.includes('.backup-')) {
+          backupFiles.push(fullPath);
+        }
+      }
+      
+      return backupFiles;
+    };
+
+    const projectPath = path.join(this.workspaceRoot, '.project');
+    const backupFiles = findBackupFiles(projectPath);
+
+    for (const backupFile of backupFiles) {
+      try {
+        const stats = fs.statSync(backupFile);
+        const fileAge = now - stats.mtime.getTime();
+        
+        if (fileAge > maxAgeMs) {
+          fs.unlinkSync(backupFile);
+          cleanedCount++;
+          console.log(`AI-Ley: Cleaned up old backup: ${backupFile}`);
+        }
+      } catch (error) {
+        console.error(`AI-Ley: Failed to clean up backup ${backupFile}:`, error);
+      }
+    }
+
+    if (cleanedCount > 0) {
+      console.log(`AI-Ley: Cleaned up ${cleanedCount} old backup files`);
+    }
+
+    return cleanedCount;
   }
 
   /**

@@ -1,6 +1,7 @@
 import { promises as fsPromises } from 'fs';
 import * as fs from 'fs';
 import fetch from 'node-fetch';
+import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ConfigurationManager } from './ConfigurationManager';
@@ -830,6 +831,40 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   });
   context.subscriptions.push(configureMcpCmd);
+
+  // Command to cleanup old backup files
+  const cleanupBackupsCmd = vscode.commands.registerCommand('aiLey.cleanupBackups', async () => {
+    const workspaceRoot = getWorkspaceRoot();
+    if (!workspaceRoot) {
+      vscode.window.showWarningMessage('AI-Ley: No workspace folder is open.');
+      return;
+    }
+
+    try {
+      // Show progress indicator
+      await vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: 'AI-Ley: Cleaning up old backup files...',
+        cancellable: false
+      }, async (progress) => {
+        const cacheRoot = path.join(os.homedir(), '.cache', 'ai-ley');
+        const configManager = new ConfigurationManager(workspaceRoot, cacheRoot);
+        
+        const cleanedCount = await configManager.cleanupOldBackups();
+        
+        if (cleanedCount > 0) {
+          vscode.window.showInformationMessage(`AI-Ley: Cleaned up ${cleanedCount} old backup files`);
+        } else {
+          vscode.window.showInformationMessage('AI-Ley: No old backup files found to clean up');
+        }
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      vscode.window.showErrorMessage(`AI-Ley: Failed to cleanup backups: ${errorMessage}`);
+      log(`Error cleaning up backups: ${errorMessage}`, workspaceRoot);
+    }
+  });
+  context.subscriptions.push(cleanupBackupsCmd);
 
   // 🔄 Watch configuration changes
   vscode.workspace.onDidChangeConfiguration(async (event: vscode.ConfigurationChangeEvent) => {

@@ -2,7 +2,7 @@
   "name": "ai-ley",
   "displayName": "AI-Ley",
   "description": "Automatically manages AI-Ley configurations and connects to the AI-Ley MCP dashboard. Syncs AI assistant configurations for GitHub Copilot, Claude, Gemini, Cursor, and more.",
-  "version": "2.6.6",
+  "version": "2.7.0",
   "publisher": "ArmoinLLC",
   "license": "CC0-1.0",
   "icon": "icon.png",
@@ -66,6 +66,11 @@
         "command": "aiLey.configureMcpServer",
         "title": "AI-Ley: Configure MCP Server",
         "category": "AI-Ley"
+      },
+      {
+        "command": "aiLey.cleanupBackups",
+        "title": "AI-Ley: Cleanup Old Backup Files",
+        "category": "AI-Ley"
       }
     ],
     "menus": {
@@ -88,6 +93,10 @@
         },
         {
           "command": "aiLey.configureMcpServer",
+          "when": "true"
+        },
+        {
+          "command": "aiLey.cleanupBackups",
           "when": "true"
         }
       ],
@@ -189,6 +198,13 @@
           "description": "Automatically update .gitignore with AI-Ley files and directories.",
           "scope": "window",
           "order": 30
+        },
+        "aiLey.safety.createBackups": {
+          "type": "boolean",
+          "default": true,
+          "description": "Create backup copies of existing files before overwriting them during synchronization. Recommended for preserving existing .project files.",
+          "scope": "window",
+          "order": 31
         },
         "aiLey.agentic.generic": {
           "type": "boolean",
